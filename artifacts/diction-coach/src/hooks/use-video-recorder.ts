@@ -175,7 +175,7 @@ async function extractFrames(blob: Blob, durationSeconds: number): Promise<strin
     const ctx = canvas.getContext("2d");
 
     video.onloadedmetadata = async () => {
-      const duration = video.duration || durationSeconds;
+      const duration = (isFinite(video.duration) && video.duration > 0) ? video.duration : durationSeconds;
       canvas.width = 320;
       canvas.height = 240;
 
