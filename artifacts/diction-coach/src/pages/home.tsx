@@ -288,7 +288,7 @@ export default function Home() {
                 {parsedFeedback.rewrite && (
                   <Card className="bg-card border-border shadow-sm">
                     <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
-                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">The Pointed Rewrite</CardTitle>
+                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">BLUF Rewrite</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
                       <div className="prose prose-sm dark:prose-invert max-w-none text-sm whitespace-pre-wrap leading-relaxed pl-4 border-l-2 border-primary/50">

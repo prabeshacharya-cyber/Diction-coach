@@ -18,7 +18,7 @@ export function parseFeedback(markdown: string) {
       currentSection = "scores";
     } else if (lowerLine.includes("the critique")) {
       currentSection = "critique";
-    } else if (lowerLine.includes("the pointed rewrite") || lowerLine.includes("pointed rewrite")) {
+    } else if (lowerLine.includes("bluf rewrite") || lowerLine.includes("the pointed rewrite") || lowerLine.includes("pointed rewrite")) {
       currentSection = "rewrite";
     } else if (lowerLine.includes("panel follow-up question") || lowerLine.includes("follow up") || lowerLine.includes("follow-up")) {
       currentSection = "followUp";

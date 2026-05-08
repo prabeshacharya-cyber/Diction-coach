@@ -17,7 +17,7 @@ Analyze the transcript strictly based on Executive Presence and the Minto Pyrami
 ### The Critique (Speeko-Style Analysis)
 [Provide blunt, constructive feedback on tone, confidence, and structure. Explicitly quote specific sentences that were rambling, sounded hesitant, or lost the executive audience's attention.]
 
-### The Pointed Rewrite
+### BLUF Rewrite
 [Rewrite the candidate's answer to be 30% shorter, punchier, and structured perfectly for a Partner panel using the Bottom-Line Up Front (BLUF) approach. Ensure the tone is highly authoritative.]
 
 ### Panel Follow-Up Question (Yoodli-Style Roleplay)
