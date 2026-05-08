@@ -27,16 +27,13 @@ export default function Home() {
   const { isRecording, startRecording, stopRecording } = useAudioRecorder();
   const transcribeMutation = useTranscribeAudio();
   const evaluateMutation = useEvaluateTranscript();
-  
-  // Just to use the hook as requested
-  useHealthCheck();
+  const { isError: isApiDown } = useHealthCheck();
 
   const handleToggleRecord = async () => {
     if (isRecording) {
       const audioData = await stopRecording();
       transcribeMutation.mutate({ data: audioData });
     } else {
-      // Reset state for new recording
       transcribeMutation.reset();
       evaluateMutation.reset();
       startRecording();
@@ -87,6 +84,11 @@ export default function Home() {
             <h1 className="text-2xl font-bold tracking-tight">Diction Coach</h1>
           </div>
           <p className="text-muted-foreground text-sm">Executive presence & speech coaching for Deloitte Partner panel rehearsals.</p>
+          {isApiDown && (
+            <p className="text-xs text-destructive" data-testid="status-api-error">
+              Unable to reach the coaching service. Please check your connection.
+            </p>
+          )}
         </div>
 
         {/* Configuration Section */}
