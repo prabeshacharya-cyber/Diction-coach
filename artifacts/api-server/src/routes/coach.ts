@@ -52,7 +52,7 @@ router.post("/transcribe", async (req, res) => {
     const audioFile = await toFile(audioBuffer, `recording.${format}`, { type: mimeType || "audio/wav" });
 
     const transcriptionResponse = await openai.audio.transcriptions.create({
-      model: "gpt-4o-mini-transcribe",
+      model: "gpt-4o-transcribe",
       file: audioFile,
       response_format: "json",
     });
@@ -99,7 +99,7 @@ router.post("/evaluate", async (req, res) => {
 
   try {
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-3-5-sonnet-latest",
       max_tokens: 8192,
       system: MASTER_PROMPT,
       messages: [{ role: "user", content: userContent }],
