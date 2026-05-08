@@ -1,0 +1,5 @@
+streamlit==1.41.1
+openai==1.59.0
+anthropic==0.42.0
+audio-recorder-streamlit==0.0.10
+pydub==0.25.1
