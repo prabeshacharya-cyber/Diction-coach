@@ -14,3 +14,44 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Transcribes base64-encoded audio and returns transcript with speech metrics
+ * @summary Transcribe audio
+ */
+export const TranscribeAudioBody = zod.object({
+  audioBase64: zod.string().describe("Base64-encoded audio data (WAV or WebM)"),
+  mimeType: zod
+    .string()
+    .optional()
+    .describe("MIME type of the audio (e.g. audio\/wav, audio\/webm)"),
+});
+
+export const TranscribeAudioResponse = zod.object({
+  transcript: zod.string().describe("The transcribed text"),
+  durationSeconds: zod
+    .number()
+    .describe("Duration of the recording in seconds"),
+  wordCount: zod.number().describe("Number of words in the transcript"),
+  wpm: zod.number().describe("Words per minute spoken"),
+});
+
+/**
+ * Evaluates a speech transcript using AI coaching and returns structured feedback
+ * @summary Evaluate transcript
+ */
+export const EvaluateTranscriptBody = zod.object({
+  transcript: zod.string().describe("The speech transcript to evaluate"),
+  promptLabel: zod
+    .string()
+    .optional()
+    .describe("The practice prompt label that was used (optional)"),
+  promptText: zod
+    .string()
+    .optional()
+    .describe("The actual practice prompt text (optional)"),
+});
+
+export const EvaluateTranscriptResponse = zod.object({
+  feedback: zod.string().describe("Structured markdown feedback from Claude"),
+});

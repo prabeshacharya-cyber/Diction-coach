@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Diction Coach"
+version = "1.0.0"
+id = "artifacts/diction-coach"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25982
+
+[services.development]
+run = "pnpm --filter @workspace/diction-coach run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/diction-coach", "run", "build" ]
+publicDir = "artifacts/diction-coach/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25982"
+BASE_PATH = "/"

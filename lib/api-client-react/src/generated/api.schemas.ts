@@ -8,3 +8,39 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface TranscribeRequest {
+  /** Base64-encoded audio data (WAV or WebM) */
+  audioBase64: string;
+  /** MIME type of the audio (e.g. audio/wav, audio/webm) */
+  mimeType?: string;
+}
+
+export interface TranscriptionResult {
+  /** The transcribed text */
+  transcript: string;
+  /** Duration of the recording in seconds */
+  durationSeconds: number;
+  /** Number of words in the transcript */
+  wordCount: number;
+  /** Words per minute spoken */
+  wpm: number;
+}
+
+export interface EvaluateRequest {
+  /** The speech transcript to evaluate */
+  transcript: string;
+  /** The practice prompt label that was used (optional) */
+  promptLabel?: string;
+  /** The actual practice prompt text (optional) */
+  promptText?: string;
+}
+
+export interface EvaluationResult {
+  /** Structured markdown feedback from Claude */
+  feedback: string;
+}
+
+export interface ErrorResponse {
+  error: string;
+}

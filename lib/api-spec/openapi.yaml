@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: coach
+    description: Diction coaching operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /transcribe:
+    post:
+      operationId: transcribeAudio
+      tags: [coach]
+      summary: Transcribe audio
+      description: Transcribes base64-encoded audio and returns transcript with speech metrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TranscribeRequest"
+      responses:
+        "200":
+          description: Transcription result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TranscriptionResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /evaluate:
+    post:
+      operationId: evaluateTranscript
+      tags: [coach]
+      summary: Evaluate transcript
+      description: Evaluates a speech transcript using AI coaching and returns structured feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+      responses:
+        "200":
+          description: Evaluation feedback
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluationResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +97,63 @@ components:
           type: string
       required:
         - status
-
+    TranscribeRequest:
+      type: object
+      properties:
+        audioBase64:
+          type: string
+          description: Base64-encoded audio data (WAV or WebM)
+        mimeType:
+          type: string
+          description: MIME type of the audio (e.g. audio/wav, audio/webm)
+      required:
+        - audioBase64
+    TranscriptionResult:
+      type: object
+      properties:
+        transcript:
+          type: string
+          description: The transcribed text
+        durationSeconds:
+          type: number
+          description: Duration of the recording in seconds
+        wordCount:
+          type: integer
+          description: Number of words in the transcript
+        wpm:
+          type: integer
+          description: Words per minute spoken
+      required:
+        - transcript
+        - durationSeconds
+        - wordCount
+        - wpm
+    EvaluateRequest:
+      type: object
+      properties:
+        transcript:
+          type: string
+          description: The speech transcript to evaluate
+        promptLabel:
+          type: string
+          description: The practice prompt label that was used (optional)
+        promptText:
+          type: string
+          description: The actual practice prompt text (optional)
+      required:
+        - transcript
+    EvaluationResult:
+      type: object
+      properties:
+        feedback:
+          type: string
+          description: Structured markdown feedback from Claude
+      required:
+        - feedback
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error

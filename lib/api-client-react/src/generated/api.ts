@@ -5,18 +5,28 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ErrorResponse,
+  EvaluateRequest,
+  EvaluationResult,
+  HealthStatus,
+  TranscribeRequest,
+  TranscriptionResult,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +109,177 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Transcribes base64-encoded audio and returns transcript with speech metrics
+ * @summary Transcribe audio
+ */
+export const getTranscribeAudioUrl = () => {
+  return `/api/transcribe`;
+};
+
+export const transcribeAudio = async (
+  transcribeRequest: TranscribeRequest,
+  options?: RequestInit,
+): Promise<TranscriptionResult> => {
+  return customFetch<TranscriptionResult>(getTranscribeAudioUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(transcribeRequest),
+  });
+};
+
+export const getTranscribeAudioMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transcribeAudio>>,
+    TError,
+    { data: BodyType<TranscribeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof transcribeAudio>>,
+  TError,
+  { data: BodyType<TranscribeRequest> },
+  TContext
+> => {
+  const mutationKey = ["transcribeAudio"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof transcribeAudio>>,
+    { data: BodyType<TranscribeRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return transcribeAudio(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type TranscribeAudioMutationResult = NonNullable<
+  Awaited<ReturnType<typeof transcribeAudio>>
+>;
+export type TranscribeAudioMutationBody = BodyType<TranscribeRequest>;
+export type TranscribeAudioMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Transcribe audio
+ */
+export const useTranscribeAudio = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof transcribeAudio>>,
+    TError,
+    { data: BodyType<TranscribeRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof transcribeAudio>>,
+  TError,
+  { data: BodyType<TranscribeRequest> },
+  TContext
+> => {
+  return useMutation(getTranscribeAudioMutationOptions(options));
+};
+
+/**
+ * Evaluates a speech transcript using AI coaching and returns structured feedback
+ * @summary Evaluate transcript
+ */
+export const getEvaluateTranscriptUrl = () => {
+  return `/api/evaluate`;
+};
+
+export const evaluateTranscript = async (
+  evaluateRequest: EvaluateRequest,
+  options?: RequestInit,
+): Promise<EvaluationResult> => {
+  return customFetch<EvaluationResult>(getEvaluateTranscriptUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(evaluateRequest),
+  });
+};
+
+export const getEvaluateTranscriptMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateTranscript>>,
+    TError,
+    { data: BodyType<EvaluateRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof evaluateTranscript>>,
+  TError,
+  { data: BodyType<EvaluateRequest> },
+  TContext
+> => {
+  const mutationKey = ["evaluateTranscript"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof evaluateTranscript>>,
+    { data: BodyType<EvaluateRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return evaluateTranscript(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type EvaluateTranscriptMutationResult = NonNullable<
+  Awaited<ReturnType<typeof evaluateTranscript>>
+>;
+export type EvaluateTranscriptMutationBody = BodyType<EvaluateRequest>;
+export type EvaluateTranscriptMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Evaluate transcript
+ */
+export const useEvaluateTranscript = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof evaluateTranscript>>,
+    TError,
+    { data: BodyType<EvaluateRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof evaluateTranscript>>,
+  TError,
+  { data: BodyType<EvaluateRequest> },
+  TContext
+> => {
+  return useMutation(getEvaluateTranscriptMutationOptions(options));
+};

@@ -6,4 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./errorResponse";
+export * from "./evaluateRequest";
+export * from "./evaluationResult";
 export * from "./healthStatus";
+export * from "./transcribeRequest";
+export * from "./transcriptionResult";
