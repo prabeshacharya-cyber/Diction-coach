@@ -3,8 +3,8 @@ import { useAuth } from "@workspace/replit-auth-web";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mic, Clock, Zap, Calendar } from "lucide-react";
-import { parseFeedback } from "@/lib/parse-feedback";
+import { ArrowLeft, Mic, Clock, Zap, Calendar, TrendingUp } from "lucide-react";
+import { parseFeedback, parseScores } from "@/lib/parse-feedback";
 
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -19,6 +19,24 @@ function formatDuration(seconds: number) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+function scoreColor(score: number) {
+  if (score >= 8) return "#22c55e";
+  if (score >= 6) return "#3b82f6";
+  if (score >= 4) return "#f59e0b";
+  return "#ef4444";
+}
+
+function MiniScoreBadge({ label, score }: { label: string; score: number }) {
+  const color = scoreColor(score);
+  const shortLabel = label.split("&")[0].split(" ").slice(0, 2).join(" ").trim();
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <span className="text-lg font-bold" style={{ color }}>{score}</span>
+      <span className="text-[10px] text-muted-foreground leading-tight text-center max-w-[56px]">{shortLabel}</span>
+    </div>
+  );
+}
+
 function wpmColor(wpm: number) {
   if (wpm > 160) return "text-destructive";
   if (wpm < 110) return "text-yellow-400";
@@ -30,9 +48,16 @@ export default function History() {
   const { user } = useAuth();
   const { data, isLoading } = useGetSessions({ query: { queryKey: getGetSessionsQueryKey(), enabled: !!user } });
 
+  const sessions = data?.sessions ?? [];
+  const avgWpm = sessions.length
+    ? Math.round(sessions.reduce((s, x) => s + x.wpm, 0) / sessions.length)
+    : null;
+
   return (
     <div className="min-h-screen bg-background px-4 py-10 font-sans">
       <div className="w-full max-w-4xl mx-auto space-y-6">
+
+        {/* Header */}
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="sm" onClick={() => navigate("/")} className="gap-2">
             <ArrowLeft className="w-4 h-4" />
@@ -44,6 +69,36 @@ export default function History() {
           </div>
         </div>
 
+        {/* Stats summary bar */}
+        {sessions.length > 0 && (
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Sessions", value: sessions.length, icon: Mic, color: "text-primary" },
+              { label: "Avg WPM", value: avgWpm ?? "—", icon: Zap, color: wpmColor(avgWpm ?? 130) },
+              {
+                label: "Best score", icon: TrendingUp, color: "text-green-400",
+                value: (() => {
+                  const allScores = sessions.flatMap(s =>
+                    s.feedback ? parseScores(parseFeedback(s.feedback).scores).map(x => x.score) : []
+                  );
+                  return allScores.length ? Math.max(...allScores) : "—";
+                })(),
+              },
+            ].map(({ label, value, icon: Icon, color }) => (
+              <Card key={label} className="border-border bg-card shadow-sm">
+                <CardContent className="pt-4 pb-3 flex items-center gap-3">
+                  <Icon className={`w-5 h-5 ${color}`} />
+                  <div>
+                    <div className={`text-xl font-bold ${color}`}>{value}</div>
+                    <div className="text-xs text-muted-foreground">{label}</div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Loading */}
         {isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
@@ -52,7 +107,8 @@ export default function History() {
           </div>
         )}
 
-        {!isLoading && (!data?.sessions || data.sessions.length === 0) && (
+        {/* Empty */}
+        {!isLoading && sessions.length === 0 && (
           <div className="text-center py-20 space-y-2">
             <Mic className="w-10 h-10 text-muted-foreground mx-auto opacity-40" />
             <p className="text-muted-foreground text-sm">No sessions yet. Record your first practice!</p>
@@ -62,18 +118,24 @@ export default function History() {
           </div>
         )}
 
+        {/* Session Cards */}
         <div className="space-y-4">
-          {data?.sessions?.map((session) => {
+          {sessions.map((session) => {
             const parsed = session.feedback ? parseFeedback(session.feedback) : null;
+            const scores = parsed?.scores ? parseScores(parsed.scores) : [];
+            const avg = scores.length
+              ? (scores.reduce((s, x) => s + x.score, 0) / scores.length)
+              : null;
+
             return (
               <Card key={session.id} className="border-border bg-card">
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <CardTitle className="text-base font-semibold">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-base font-semibold truncate">
                         {session.promptLabel || "Free-form practice"}
                       </CardTitle>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {formatDate(session.createdAt)}
@@ -88,24 +150,38 @@ export default function History() {
                         </span>
                       </div>
                     </div>
+                    {/* Overall score badge */}
+                    {avg !== null && (
+                      <div className="text-center shrink-0">
+                        <div className="text-2xl font-bold" style={{ color: scoreColor(Math.round(avg)) }}>
+                          {avg.toFixed(1)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">/ 10</div>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+
+                <CardContent className="space-y-3 pt-0">
+                  {/* Mini score row */}
+                  {scores.length > 0 && (
+                    <div className="flex items-center gap-4 px-3 py-3 rounded-lg bg-muted/20 border border-border/50">
+                      {scores.map(({ label, score }) => (
+                        <MiniScoreBadge key={label} label={label} score={score} />
+                      ))}
+                    </div>
+                  )}
+
                   {session.transcript && (
                     <p className="text-sm text-muted-foreground line-clamp-2 leading-relaxed">
                       "{session.transcript}"
                     </p>
                   )}
+
                   {session.bodyLanguageAnalysis && (
                     <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Body Language</p>
                       <p className="text-xs leading-relaxed line-clamp-2">{session.bodyLanguageAnalysis}</p>
-                    </div>
-                  )}
-                  {parsed?.scores && (
-                    <div className="p-3 rounded-lg bg-muted/30 border border-border/50">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Scores</p>
-                      <p className="text-xs leading-relaxed line-clamp-3 whitespace-pre-wrap">{parsed.scores}</p>
                     </div>
                   )}
                 </CardContent>

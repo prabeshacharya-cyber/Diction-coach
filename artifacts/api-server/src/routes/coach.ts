@@ -177,15 +177,34 @@ router.post("/speak", async (req, res) => {
   }
 
   const { text } = parsed.data;
-  const cleanText = text
-    .replace(/#{1,6}\s/g, "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/\[(.+?)\]\(.+?\)/g, "$1")
-    .trim();
 
   try {
-    const audioBuffer = await textToSpeech(cleanText.slice(0, 4096), "onyx", "mp3");
+    const scriptResponse = await anthropic.messages.create({
+      model: "claude-3-5-sonnet-latest",
+      max_tokens: 500,
+      system: `You are a Senior Partner at Deloitte giving verbal coaching feedback to a candidate after their practice presentation. Convert the written coaching report into a natural spoken debrief.
+
+Rules:
+- Pure flowing speech — no lists, no asterisks, no "number one", no markdown formatting
+- Open directly and confidently: "Alright, let me give you my honest read on that."
+- Weave in the actual score numbers naturally: "I landed you at an eight on conciseness — here's why."
+- Name one concrete strength and one most critical improvement
+- End with a single specific, actionable technique the candidate can apply in the next practice
+- 140–170 words total — crisp, not padded
+- Tone: direct, confident senior partner. Not a cheerleader. Brutally honest but constructive.`,
+      messages: [{ role: "user", content: `Convert this written coaching report into a natural spoken script:\n\n${text}` }],
+    });
+
+    const spokenScript =
+      scriptResponse.content[0]?.type === "text"
+        ? scriptResponse.content[0].text.trim()
+        : text
+            .replace(/#{1,6}\s/g, "")
+            .replace(/\*\*(.+?)\*\*/g, "$1")
+            .replace(/\*(.+?)\*/g, "$1")
+            .trim();
+
+    const audioBuffer = await textToSpeech(spokenScript.slice(0, 4096), "onyx", "mp3");
     res.json({ audioBase64: audioBuffer.toString("base64") });
   } catch (err) {
     console.error("TTS error:", err);
