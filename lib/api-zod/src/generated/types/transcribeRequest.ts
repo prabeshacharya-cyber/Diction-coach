@@ -11,4 +11,6 @@ export interface TranscribeRequest {
   audioBase64: string;
   /** MIME type of the audio (e.g. audio/wav, audio/webm) */
   mimeType?: string;
+  /** Actual recording duration in seconds (measured client-side) */
+  durationSeconds?: number;
 }

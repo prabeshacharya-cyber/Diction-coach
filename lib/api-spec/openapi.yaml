@@ -106,6 +106,9 @@ components:
         mimeType:
           type: string
           description: MIME type of the audio (e.g. audio/wav, audio/webm)
+        durationSeconds:
+          type: number
+          description: Actual recording duration in seconds (measured client-side)
       required:
         - audioBase64
     TranscriptionResult:

@@ -25,6 +25,10 @@ export const TranscribeAudioBody = zod.object({
     .string()
     .optional()
     .describe("MIME type of the audio (e.g. audio\/wav, audio\/webm)"),
+  durationSeconds: zod
+    .number()
+    .optional()
+    .describe("Actual recording duration in seconds (measured client-side)"),
 });
 
 export const TranscribeAudioResponse = zod.object({

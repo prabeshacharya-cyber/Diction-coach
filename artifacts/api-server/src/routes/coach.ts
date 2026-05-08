@@ -48,8 +48,9 @@ router.post("/transcribe", async (req, res) => {
   try {
     const format = (mimeType?.includes("webm") ? "webm" : "wav") as "wav" | "webm";
 
-    const { toFile } = await import("openai");
-    const audioFile = await toFile(audioBuffer, `recording.${format}`, { type: mimeType || "audio/wav" });
+    const audioFile = new File([new Uint8Array(audioBuffer)], `recording.${format}`, {
+      type: mimeType || "audio/webm",
+    });
 
     const transcriptionResponse = await openai.audio.transcriptions.create({
       model: "gpt-4o-transcribe",
@@ -66,14 +67,18 @@ router.post("/transcribe", async (req, res) => {
     const words = transcript.split(/\s+/).filter(Boolean);
     const wordCount = words.length;
 
-    const estimatedDurationSeconds = Math.max(1, wordCount / 2.3);
+    const { durationSeconds: clientDuration } = parsed.data;
+    const durationSeconds =
+      typeof clientDuration === "number" && clientDuration > 0
+        ? clientDuration
+        : Math.max(1, wordCount / 2.3);
 
-    const minutes = estimatedDurationSeconds / 60;
+    const minutes = durationSeconds / 60;
     const wpm = minutes > 0 ? Math.round(wordCount / minutes) : 0;
 
     res.json({
       transcript,
-      durationSeconds: estimatedDurationSeconds,
+      durationSeconds,
       wordCount,
       wpm,
     });
