@@ -105,7 +105,7 @@ export default function Home() {
   const [selectedPromptId, setSelectedPromptId] = useState("1");
   const selectedPrompt = PROMPTS.find(p => p.id === selectedPromptId) || PROMPTS[0];
 
-  const { isRecording, videoUrl, videoRef, hasPermission, startRecording, stopRecording, reset: resetRecorder } = useVideoRecorder();
+  const { isRecording, audioLevel, videoUrl, videoRef, hasPermission, startRecording, stopRecording, reset: resetRecorder } = useVideoRecorder();
   const transcribeMutation = useTranscribeAudio();
   const evaluateMutation = useEvaluateTranscript();
   const speakMutation = useSpeakFeedback();
@@ -326,6 +326,31 @@ export default function Home() {
                   <p className="text-xs text-destructive">
                     Camera & microphone access denied. Please allow permissions and try again.
                   </p>
+                )}
+                {/* Live audio level meter */}
+                {isRecording && (
+                  <div className="space-y-1.5" data-testid="audio-level-meter">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                        Mic level
+                      </span>
+                      <span>{audioLevel < 0.05 ? "Silence" : audioLevel < 0.35 ? "Soft" : audioLevel < 0.7 ? "Good" : "Loud"}</span>
+                    </div>
+                    <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-75"
+                        style={{
+                          width: `${Math.round(audioLevel * 100)}%`,
+                          backgroundColor: audioLevel < 0.35
+                            ? "hsl(var(--primary))"
+                            : audioLevel < 0.7
+                            ? "#22c55e"
+                            : "#ef4444",
+                        }}
+                      />
+                    </div>
+                  </div>
                 )}
               </div>
             </CardContent>

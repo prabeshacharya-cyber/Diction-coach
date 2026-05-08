@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 export interface VideoRecorderResult {
   audioBase64: string;
@@ -11,12 +11,40 @@ export function useVideoRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startTimeRef = useRef<number>(0);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+
+  const startLevelPolling = useCallback((analyser: AnalyserNode) => {
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    const poll = () => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const normalized = (data[i] - 128) / 128;
+        sum += normalized * normalized;
+      }
+      setAudioLevel(Math.min(1, Math.sqrt(sum / data.length) * 4));
+      animFrameRef.current = requestAnimationFrame(poll);
+    };
+    animFrameRef.current = requestAnimationFrame(poll);
+  }, []);
+
+  const stopLevelPolling = useCallback(() => {
+    if (animFrameRef.current !== null) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    setAudioLevel(0);
+    audioContextRef.current?.close();
+    audioContextRef.current = null;
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {
@@ -33,6 +61,14 @@ export function useVideoRecorder() {
         videoRef.current.muted = true;
         await videoRef.current.play().catch(() => {});
       }
+
+      // Wire up AnalyserNode for live audio level
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      audioContextRef.current = audioContext;
+      startLevelPolling(analyser);
 
       const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
         ? "video/webm;codecs=vp9,opus"
@@ -56,7 +92,7 @@ export function useVideoRecorder() {
       console.error("Failed to start recording:", err);
       throw err;
     }
-  }, []);
+  }, [startLevelPolling]);
 
   const stopRecording = useCallback(async (): Promise<VideoRecorderResult> => {
     return new Promise((resolve, reject) => {
@@ -65,6 +101,8 @@ export function useVideoRecorder() {
         reject(new Error("No recorder"));
         return;
       }
+
+      stopLevelPolling();
 
       const durationSeconds = (Date.now() - startTimeRef.current) / 1000;
 
@@ -102,7 +140,7 @@ export function useVideoRecorder() {
       recorder.stop();
       setIsRecording(false);
     });
-  }, []);
+  }, [stopLevelPolling]);
 
   const reset = useCallback(() => {
     if (videoUrl) {
@@ -112,7 +150,16 @@ export function useVideoRecorder() {
     setIsRecording(false);
   }, [videoUrl]);
 
-  return { isRecording, videoUrl, videoRef, hasPermission, startRecording, stopRecording, reset };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current !== null) cancelAnimationFrame(animFrameRef.current);
+      audioContextRef.current?.close();
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  return { isRecording, audioLevel, videoUrl, videoRef, hasPermission, startRecording, stopRecording, reset };
 }
 
 async function extractFrames(blob: Blob, durationSeconds: number): Promise<string[]> {
