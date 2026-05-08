@@ -1,3 +1,4 @@
+import "./setup-env";
 import app from "./app";
 import { logger } from "./lib/logger";
 
