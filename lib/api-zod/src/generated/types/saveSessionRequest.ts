@@ -6,11 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface TranscriptionResult {
+export interface SaveSessionRequest {
+  promptLabel?: string;
+  promptText?: string;
   transcript: string;
-  durationSeconds: number;
   wordCount: number;
   wpm: number;
-  /** AI analysis of body language from video frames */
+  durationSeconds: number;
+  feedback?: string;
   bodyLanguageAnalysis?: string;
 }

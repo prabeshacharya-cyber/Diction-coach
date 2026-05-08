@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: API specification
@@ -12,6 +11,8 @@ tags:
     description: Health operations
   - name: coach
     description: Diction coaching operations
+  - name: Auth
+    description: Browser and mobile authentication endpoints.
 paths:
   /healthz:
     get:
@@ -30,8 +31,7 @@ paths:
     post:
       operationId: transcribeAudio
       tags: [coach]
-      summary: Transcribe audio
-      description: Transcribes base64-encoded audio and returns transcript with speech metrics
+      summary: Transcribe audio and optionally analyze video frames
       requestBody:
         required: true
         content:
@@ -61,8 +61,7 @@ paths:
     post:
       operationId: evaluateTranscript
       tags: [coach]
-      summary: Evaluate transcript
-      description: Evaluates a speech transcript using AI coaching and returns structured feedback
+      summary: Evaluate transcript with AI coaching
       requestBody:
         required: true
         content:
@@ -88,7 +87,218 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /speak:
+    post:
+      operationId: speakFeedback
+      tags: [coach]
+      summary: Convert text feedback to spoken audio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeakRequest"
+      responses:
+        "200":
+          description: Audio data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpeakResult"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /sessions:
+    get:
+      operationId: getSessions
+      tags: [coach]
+      summary: Get practice session history for the current user
+      parameters:
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionListResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: saveSession
+      tags: [coach]
+      summary: Save a practice session
+      parameters:
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveSessionRequest"
+      responses:
+        "200":
+          description: Saved session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveSessionResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/user:
+    get:
+      tags: [Auth]
+      operationId: getCurrentAuthUser
+      summary: Get the currently authenticated user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Auth status resolved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthUserEnvelope'
+  /login:
+    get:
+      tags: [Auth]
+      operationId: beginBrowserLogin
+      summary: Start the browser OIDC login flow
+      parameters:
+        - name: returnTo
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Redirect to the OIDC authorization endpoint.
+  /callback:
+    get:
+      tags: [Auth]
+      operationId: handleBrowserLoginCallback
+      summary: Complete the browser OIDC login flow
+      parameters:
+        - name: code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: iss
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: Redirect to the returnTo path on success.
+  /logout:
+    get:
+      tags: [Auth]
+      operationId: logoutBrowserSession
+      summary: Clear the session and begin OIDC logout
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '302':
+          description: Redirect to the OIDC provider logout URL.
+  /mobile-auth/token-exchange:
+    post:
+      tags: [Auth]
+      operationId: exchangeMobileAuthorizationCode
+      summary: Exchange a mobile OIDC code for a session token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MobileTokenExchangeRequest'
+      responses:
+        '200':
+          description: Session created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileTokenExchangeSuccess'
+        '400':
+          description: Missing or invalid required fields.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Token did not contain usable claims.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          description: Token exchange failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /mobile-auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutMobileSession
+      summary: Delete a mobile session token
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+      responses:
+        '200':
+          description: Logout processed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutSuccess'
 components:
+  parameters:
+    AuthorizationSessionHeader:
+      name: Authorization
+      in: header
+      required: false
+      description: Opaque session token — Bearer <sid>.
+      schema:
+        type: string
+    SessionCookie:
+      name: sid
+      in: cookie
+      required: false
+      description: Browser session cookie.
+      schema:
+        type: string
   schemas:
     HealthStatus:
       type: object
@@ -102,13 +312,18 @@ components:
       properties:
         audioBase64:
           type: string
-          description: Base64-encoded audio data (WAV or WebM)
+          description: Base64-encoded audio data
         mimeType:
           type: string
-          description: MIME type of the audio (e.g. audio/wav, audio/webm)
+          description: MIME type of the audio
         durationSeconds:
           type: number
           description: Actual recording duration in seconds (measured client-side)
+        videoFrames:
+          type: array
+          items:
+            type: string
+          description: Base64-encoded JPEG video frames for body language analysis
       required:
         - audioBase64
     TranscriptionResult:
@@ -116,16 +331,15 @@ components:
       properties:
         transcript:
           type: string
-          description: The transcribed text
         durationSeconds:
           type: number
-          description: Duration of the recording in seconds
         wordCount:
           type: integer
-          description: Number of words in the transcript
         wpm:
           type: integer
-          description: Words per minute spoken
+        bodyLanguageAnalysis:
+          type: string
+          description: AI analysis of body language from video frames
       required:
         - transcript
         - durationSeconds
@@ -136,13 +350,13 @@ components:
       properties:
         transcript:
           type: string
-          description: The speech transcript to evaluate
         promptLabel:
           type: string
-          description: The practice prompt label that was used (optional)
         promptText:
           type: string
-          description: The actual practice prompt text (optional)
+        bodyLanguageAnalysis:
+          type: string
+          description: Body language analysis to incorporate into feedback
       required:
         - transcript
     EvaluationResult:
@@ -150,9 +364,95 @@ components:
       properties:
         feedback:
           type: string
-          description: Structured markdown feedback from Claude
       required:
         - feedback
+    SpeakRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Text to convert to speech
+      required:
+        - text
+    SpeakResult:
+      type: object
+      properties:
+        audioBase64:
+          type: string
+          description: Base64-encoded MP3 audio
+      required:
+        - audioBase64
+    SaveSessionRequest:
+      type: object
+      properties:
+        promptLabel:
+          type: string
+        promptText:
+          type: string
+        transcript:
+          type: string
+        wordCount:
+          type: integer
+        wpm:
+          type: integer
+        durationSeconds:
+          type: integer
+        feedback:
+          type: string
+        bodyLanguageAnalysis:
+          type: string
+      required:
+        - transcript
+        - wordCount
+        - wpm
+        - durationSeconds
+    SaveSessionResult:
+      type: object
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - createdAt
+    SessionListResult:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionSummary"
+      required:
+        - sessions
+    SessionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        promptLabel:
+          type: string
+        wpm:
+          type: integer
+        wordCount:
+          type: integer
+        durationSeconds:
+          type: integer
+        createdAt:
+          type: string
+        transcript:
+          type: string
+        feedback:
+          type: string
+        bodyLanguageAnalysis:
+          type: string
+      required:
+        - id
+        - wpm
+        - wordCount
+        - durationSeconds
+        - createdAt
+        - transcript
     ErrorResponse:
       type: object
       properties:
@@ -160,3 +460,65 @@ components:
           type: string
       required:
         - error
+    AuthUser:
+      type: object
+      required: [id, email, firstName, lastName, profileImageUrl]
+      properties:
+        id:
+          type: string
+        email:
+          type: [string, 'null']
+          format: email
+        firstName:
+          type: [string, 'null']
+        lastName:
+          type: [string, 'null']
+        profileImageUrl:
+          type: [string, 'null']
+    AuthUserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user:
+          oneOf:
+            - $ref: '#/components/schemas/AuthUser'
+            - type: 'null'
+    MobileTokenExchangeRequest:
+      type: object
+      required: [code, code_verifier, redirect_uri, state]
+      properties:
+        code:
+          type: string
+          minLength: 1
+        code_verifier:
+          type: string
+          minLength: 1
+        redirect_uri:
+          type: string
+          minLength: 1
+          format: uri
+        state:
+          type: string
+          minLength: 1
+        nonce:
+          type: string
+          minLength: 1
+    MobileTokenExchangeSuccess:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+    LogoutSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string

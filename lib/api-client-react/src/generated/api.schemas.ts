@@ -10,39 +10,136 @@ export interface HealthStatus {
 }
 
 export interface TranscribeRequest {
-  /** Base64-encoded audio data (WAV or WebM) */
+  /** Base64-encoded audio data */
   audioBase64: string;
-  /** MIME type of the audio (e.g. audio/wav, audio/webm) */
+  /** MIME type of the audio */
   mimeType?: string;
   /** Actual recording duration in seconds (measured client-side) */
   durationSeconds?: number;
+  /** Base64-encoded JPEG video frames for body language analysis */
+  videoFrames?: string[];
 }
 
 export interface TranscriptionResult {
-  /** The transcribed text */
   transcript: string;
-  /** Duration of the recording in seconds */
   durationSeconds: number;
-  /** Number of words in the transcript */
   wordCount: number;
-  /** Words per minute spoken */
   wpm: number;
+  /** AI analysis of body language from video frames */
+  bodyLanguageAnalysis?: string;
 }
 
 export interface EvaluateRequest {
-  /** The speech transcript to evaluate */
   transcript: string;
-  /** The practice prompt label that was used (optional) */
   promptLabel?: string;
-  /** The actual practice prompt text (optional) */
   promptText?: string;
+  /** Body language analysis to incorporate into feedback */
+  bodyLanguageAnalysis?: string;
 }
 
 export interface EvaluationResult {
-  /** Structured markdown feedback from Claude */
   feedback: string;
+}
+
+export interface SpeakRequest {
+  /** Text to convert to speech */
+  text: string;
+}
+
+export interface SpeakResult {
+  /** Base64-encoded MP3 audio */
+  audioBase64: string;
+}
+
+export interface SaveSessionRequest {
+  promptLabel?: string;
+  promptText?: string;
+  transcript: string;
+  wordCount: number;
+  wpm: number;
+  durationSeconds: number;
+  feedback?: string;
+  bodyLanguageAnalysis?: string;
+}
+
+export interface SaveSessionResult {
+  id: string;
+  createdAt: string;
+}
+
+export interface SessionSummary {
+  id: string;
+  promptLabel?: string;
+  wpm: number;
+  wordCount: number;
+  durationSeconds: number;
+  createdAt: string;
+  transcript: string;
+  feedback?: string;
+  bodyLanguageAnalysis?: string;
+}
+
+export interface SessionListResult {
+  sessions: SessionSummary[];
 }
 
 export interface ErrorResponse {
   error: string;
 }
+
+export interface AuthUser {
+  id: string;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  /** @nullable */
+  profileImageUrl: string | null;
+}
+
+export interface AuthUserEnvelope {
+  user: AuthUser | null;
+}
+
+export interface MobileTokenExchangeRequest {
+  /** @minLength 1 */
+  code: string;
+  /** @minLength 1 */
+  code_verifier: string;
+  /** @minLength 1 */
+  redirect_uri: string;
+  /** @minLength 1 */
+  state: string;
+  /** @minLength 1 */
+  nonce?: string;
+}
+
+export interface MobileTokenExchangeSuccess {
+  token: string;
+}
+
+export const LogoutSuccessValue = {
+  success: true,
+} as const;
+export type LogoutSuccess = typeof LogoutSuccessValue;
+
+export interface ErrorEnvelope {
+  error: string;
+}
+
+/**
+ * Opaque session token — Bearer <sid>.
+ */
+export type AuthorizationSessionHeaderParameter = string;
+
+export type BeginBrowserLoginParams = {
+  returnTo?: string;
+};
+
+export type HandleBrowserLoginCallbackParams = {
+  code?: string;
+  state?: string;
+  iss?: string;
+};

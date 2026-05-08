@@ -5,7 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SessionSummary } from "./sessionSummary";
 
-export interface EvaluationResult {
-  feedback: string;
+export interface SessionListResult {
+  sessions: SessionSummary[];
 }

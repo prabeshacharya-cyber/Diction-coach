@@ -16,46 +16,173 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Transcribes base64-encoded audio and returns transcript with speech metrics
- * @summary Transcribe audio
+ * @summary Transcribe audio and optionally analyze video frames
  */
 export const TranscribeAudioBody = zod.object({
-  audioBase64: zod.string().describe("Base64-encoded audio data (WAV or WebM)"),
-  mimeType: zod
-    .string()
-    .optional()
-    .describe("MIME type of the audio (e.g. audio\/wav, audio\/webm)"),
+  audioBase64: zod.string().describe("Base64-encoded audio data"),
+  mimeType: zod.string().optional().describe("MIME type of the audio"),
   durationSeconds: zod
     .number()
     .optional()
     .describe("Actual recording duration in seconds (measured client-side)"),
+  videoFrames: zod
+    .array(zod.string())
+    .optional()
+    .describe("Base64-encoded JPEG video frames for body language analysis"),
 });
 
 export const TranscribeAudioResponse = zod.object({
-  transcript: zod.string().describe("The transcribed text"),
-  durationSeconds: zod
-    .number()
-    .describe("Duration of the recording in seconds"),
-  wordCount: zod.number().describe("Number of words in the transcript"),
-  wpm: zod.number().describe("Words per minute spoken"),
+  transcript: zod.string(),
+  durationSeconds: zod.number(),
+  wordCount: zod.number(),
+  wpm: zod.number(),
+  bodyLanguageAnalysis: zod
+    .string()
+    .optional()
+    .describe("AI analysis of body language from video frames"),
 });
 
 /**
- * Evaluates a speech transcript using AI coaching and returns structured feedback
- * @summary Evaluate transcript
+ * @summary Evaluate transcript with AI coaching
  */
 export const EvaluateTranscriptBody = zod.object({
-  transcript: zod.string().describe("The speech transcript to evaluate"),
-  promptLabel: zod
+  transcript: zod.string(),
+  promptLabel: zod.string().optional(),
+  promptText: zod.string().optional(),
+  bodyLanguageAnalysis: zod
     .string()
     .optional()
-    .describe("The practice prompt label that was used (optional)"),
-  promptText: zod
-    .string()
-    .optional()
-    .describe("The actual practice prompt text (optional)"),
+    .describe("Body language analysis to incorporate into feedback"),
 });
 
 export const EvaluateTranscriptResponse = zod.object({
-  feedback: zod.string().describe("Structured markdown feedback from Claude"),
+  feedback: zod.string(),
+});
+
+/**
+ * @summary Convert text feedback to spoken audio
+ */
+export const SpeakFeedbackBody = zod.object({
+  text: zod.string().describe("Text to convert to speech"),
+});
+
+export const SpeakFeedbackResponse = zod.object({
+  audioBase64: zod.string().describe("Base64-encoded MP3 audio"),
+});
+
+/**
+ * @summary Get practice session history for the current user
+ */
+export const GetSessionsResponse = zod.object({
+  sessions: zod.array(
+    zod.object({
+      id: zod.string(),
+      promptLabel: zod.string().optional(),
+      wpm: zod.number(),
+      wordCount: zod.number(),
+      durationSeconds: zod.number(),
+      createdAt: zod.string(),
+      transcript: zod.string(),
+      feedback: zod.string().optional(),
+      bodyLanguageAnalysis: zod.string().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Save a practice session
+ */
+export const SaveSessionBody = zod.object({
+  promptLabel: zod.string().optional(),
+  promptText: zod.string().optional(),
+  transcript: zod.string(),
+  wordCount: zod.number(),
+  wpm: zod.number(),
+  durationSeconds: zod.number(),
+  feedback: zod.string().optional(),
+  bodyLanguageAnalysis: zod.string().optional(),
+});
+
+export const SaveSessionResponse = zod.object({
+  id: zod.string(),
+  createdAt: zod.string(),
+});
+
+/**
+ * @summary Get the currently authenticated user
+ */
+export const GetCurrentAuthUserHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+export const GetCurrentAuthUserResponse = zod.object({
+  user: zod.union([
+    zod.object({
+      id: zod.string(),
+      email: zod.string().email().nullable(),
+      firstName: zod.string().nullable(),
+      lastName: zod.string().nullable(),
+      profileImageUrl: zod.string().nullable(),
+    }),
+    zod.null(),
+  ]),
+});
+
+/**
+ * @summary Start the browser OIDC login flow
+ */
+export const BeginBrowserLoginQueryParams = zod.object({
+  returnTo: zod.coerce.string().optional(),
+});
+
+/**
+ * @summary Complete the browser OIDC login flow
+ */
+export const HandleBrowserLoginCallbackQueryParams = zod.object({
+  code: zod.coerce.string().optional(),
+  state: zod.coerce.string().optional(),
+  iss: zod.coerce.string().url().optional(),
+});
+
+/**
+ * @summary Clear the session and begin OIDC logout
+ */
+export const LogoutBrowserSessionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+/**
+ * @summary Exchange a mobile OIDC code for a session token
+ */
+
+export const ExchangeMobileAuthorizationCodeBody = zod.object({
+  code: zod.string().min(1),
+  code_verifier: zod.string().min(1),
+  redirect_uri: zod.string().url().min(1),
+  state: zod.string().min(1),
+  nonce: zod.string().min(1).optional(),
+});
+
+export const ExchangeMobileAuthorizationCodeResponse = zod.object({
+  token: zod.string(),
+});
+
+/**
+ * @summary Delete a mobile session token
+ */
+export const LogoutMobileSessionHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — Bearer <sid>."),
+});
+
+export const LogoutMobileSessionResponse = zod.object({
+  success: zod.boolean(),
 });

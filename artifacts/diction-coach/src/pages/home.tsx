@@ -1,14 +1,25 @@
-import { useState } from "react";
-import { useTranscribeAudio, useEvaluateTranscript, useHealthCheck } from "@workspace/api-client-react";
-import { useAudioRecorder } from "@/hooks/use-audio-recorder";
+import { useState, useRef, useCallback } from "react";
+import { useLocation } from "wouter";
+import {
+  useTranscribeAudio,
+  useEvaluateTranscript,
+  useSpeakFeedback,
+  useSaveSession,
+} from "@workspace/api-client-react";
+import { useAuth } from "@workspace/replit-auth-web";
+import { useVideoRecorder } from "@/hooks/use-video-recorder";
 import { HighlightedTranscript } from "@/lib/highlight-transcript";
 import { parseFeedback } from "@/lib/parse-feedback";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Mic, Square, Activity, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Mic, Square, Activity, ChevronRight, CheckCircle2, AlertTriangle,
+  RefreshCcw, Volume2, VolumeX, History, LogOut, Video, VideoOff,
+  User, Loader2, BookmarkPlus, Check
+} from "lucide-react";
 
 const PROMPTS = [
   { id: "1", label: "Free-form (no prompt)", text: "Speak freely about any topic." },
@@ -17,89 +28,172 @@ const PROMPTS = [
   { id: "4", label: "P2P post-merger integration", text: "What is your point of view on rationalizing the P2P process during a post-merger integration?" },
   { id: "5", label: "Forecast to Stock at scale", text: "How would you redesign a Forecast-to-Stock process for a global manufacturer struggling with inventory carrying costs?" },
   { id: "6", label: "Pushing back on a CFO", text: "Tell us about a time you had to push back on a CFO. What did you do, and what was the outcome?" },
-  { id: "7", label: "Why you, why now (Partner)", text: "Why you, and why now, for Partner?" }
+  { id: "7", label: "Why you, why now (Partner)", text: "Why you, and why now, for Partner?" },
 ];
 
+function wpmBand(wpm: number) {
+  if (wpm > 160) return { label: "Too fast", color: "text-destructive", icon: AlertTriangle };
+  if (wpm < 110) return { label: "Too slow", color: "text-yellow-400", icon: AlertTriangle };
+  if (wpm >= 130 && wpm <= 150) return { label: "Optimal", color: "text-green-400", icon: CheckCircle2 };
+  return { label: "Acceptable", color: "text-primary", icon: CheckCircle2 };
+}
+
 export default function Home() {
+  const [, navigate] = useLocation();
+  const { user, logout } = useAuth();
   const [selectedPromptId, setSelectedPromptId] = useState("1");
   const selectedPrompt = PROMPTS.find(p => p.id === selectedPromptId) || PROMPTS[0];
-  
-  const { isRecording, startRecording, stopRecording } = useAudioRecorder();
+
+  const { isRecording, videoUrl, videoRef, hasPermission, startRecording, stopRecording, reset: resetRecorder } = useVideoRecorder();
   const transcribeMutation = useTranscribeAudio();
   const evaluateMutation = useEvaluateTranscript();
-  const { isError: isApiDown } = useHealthCheck();
+  const speakMutation = useSpeakFeedback();
+  const saveSessionMutation = useSaveSession();
+
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [sessionSaved, setSessionSaved] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const handleToggleRecord = async () => {
     if (isRecording) {
-      const audioData = await stopRecording();
-      transcribeMutation.mutate({ data: audioData });
+      try {
+        const result = await stopRecording();
+        transcribeMutation.mutate({
+          data: {
+            audioBase64: result.audioBase64,
+            mimeType: result.mimeType,
+            durationSeconds: result.durationSeconds,
+            videoFrames: result.videoFrames,
+          },
+        });
+      } catch {
+        // permission denied or device error handled by hasPermission state
+      }
     } else {
       transcribeMutation.reset();
       evaluateMutation.reset();
+      speakMutation.reset();
+      setSessionSaved(false);
+      resetRecorder();
       startRecording();
     }
   };
 
   const handleEvaluate = () => {
     if (!transcribeMutation.data?.transcript) return;
-    
     evaluateMutation.mutate({
       data: {
         transcript: transcribeMutation.data.transcript,
         promptLabel: selectedPrompt.label,
-        promptText: selectedPrompt.text
-      }
+        promptText: selectedPrompt.text,
+        bodyLanguageAnalysis: transcribeMutation.data.bodyLanguageAnalysis ?? undefined,
+      },
     });
+  };
+
+  const handleSpeak = useCallback(async () => {
+    if (!evaluateMutation.data?.feedback) return;
+    if (isSpeaking) {
+      audioRef.current?.pause();
+      setIsSpeaking(false);
+      return;
+    }
+    speakMutation.mutate(
+      { data: { text: evaluateMutation.data.feedback } },
+      {
+        onSuccess: (data) => {
+          const audio = new Audio(`data:audio/mp3;base64,${data.audioBase64}`);
+          audioRef.current = audio;
+          audio.play();
+          setIsSpeaking(true);
+          audio.onended = () => setIsSpeaking(false);
+          audio.onerror = () => setIsSpeaking(false);
+        },
+      }
+    );
+  }, [evaluateMutation.data?.feedback, isSpeaking, speakMutation]);
+
+  const handleSaveSession = () => {
+    if (!transcribeMutation.data) return;
+    saveSessionMutation.mutate(
+      {
+        data: {
+          promptLabel: selectedPrompt.id === "1" ? undefined : selectedPrompt.label,
+          promptText: selectedPrompt.id === "1" ? undefined : selectedPrompt.text,
+          transcript: transcribeMutation.data.transcript,
+          wordCount: transcribeMutation.data.wordCount,
+          wpm: transcribeMutation.data.wpm,
+          durationSeconds: Math.round(transcribeMutation.data.durationSeconds),
+          feedback: evaluateMutation.data?.feedback ?? undefined,
+          bodyLanguageAnalysis: transcribeMutation.data.bodyLanguageAnalysis ?? undefined,
+        },
+      },
+      { onSuccess: () => setSessionSaved(true) }
+    );
   };
 
   const handleReset = () => {
     transcribeMutation.reset();
     evaluateMutation.reset();
+    speakMutation.reset();
+    setSessionSaved(false);
+    setIsSpeaking(false);
+    audioRef.current?.pause();
+    resetRecorder();
   };
 
-  const wpm = transcribeMutation.data?.wpm || 0;
-  let wpmStatus = "neutral";
-  let wpmColor = "text-gray-400";
-  if (wpm > 160) {
-    wpmStatus = "error";
-    wpmColor = "text-red-500";
-  } else if (wpm > 0 && wpm < 110) {
-    wpmStatus = "warning";
-    wpmColor = "text-orange-500";
-  } else if (wpm >= 130 && wpm <= 150) {
-    wpmStatus = "success";
-    wpmColor = "text-green-500";
-  }
+  const parsedFeedback = evaluateMutation.data?.feedback
+    ? parseFeedback(evaluateMutation.data.feedback)
+    : null;
 
-  const parsedFeedback = evaluateMutation.data ? parseFeedback(evaluateMutation.data.feedback) : null;
+  const wpm = transcribeMutation.data?.wpm;
+  const wpmInfo = wpm != null ? wpmBand(wpm) : null;
+
+  const showSetup = !transcribeMutation.data && !transcribeMutation.isPending;
+  const showResults = !!transcribeMutation.data;
 
   return (
-    <div className="min-h-screen w-full bg-background flex flex-col items-center py-12 px-4 font-sans">
-      <div className="w-full max-w-4xl space-y-8">
-        
+    <div className="min-h-screen w-full bg-background flex flex-col items-center py-10 px-4 font-sans">
+      <div className="w-full max-w-4xl space-y-6">
+
         {/* Header */}
-        <div className="space-y-2">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-primary">
-            <Activity className="w-6 h-6" />
-            <h1 className="text-2xl font-bold tracking-tight">Diction Coach</h1>
+            <Activity className="w-5 h-5" />
+            <h1 className="text-xl font-bold tracking-tight">Diction Coach</h1>
           </div>
-          <p className="text-muted-foreground text-sm">Executive presence & speech coaching for Deloitte Partner panel rehearsals.</p>
-          {isApiDown && (
-            <p className="text-xs text-destructive" data-testid="status-api-error">
-              Unable to reach the coaching service. Please check your connection.
-            </p>
-          )}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/history")} className="gap-2 text-muted-foreground">
+              <History className="w-4 h-4" />
+              <span className="hidden sm:inline">History</span>
+            </Button>
+            <div className="flex items-center gap-2 pl-2 border-l border-border">
+              {user?.profileImageUrl ? (
+                <img src={user.profileImageUrl} alt="" className="w-7 h-7 rounded-full" />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                </div>
+              )}
+              <span className="text-sm text-muted-foreground hidden sm:inline">
+                {user?.firstName || user?.email || ""}
+              </span>
+              <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground px-2">
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
         </div>
 
-        {/* Configuration Section */}
-        {(!transcribeMutation.data && !transcribeMutation.isPending) && (
+        {/* Setup Section */}
+        {showSetup && (
           <Card className="border-border bg-card shadow-sm">
             <CardHeader>
               <CardTitle className="text-lg">Select Practice Prompt</CardTitle>
-              <CardDescription>Choose a prompt to practice or speak freely.</CardDescription>
+              <CardDescription>Choose a Deloitte Partner panel question to practice.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <Label htmlFor="prompt-select">Panel Question</Label>
                 <Select value={selectedPromptId} onValueChange={setSelectedPromptId}>
                   <SelectTrigger id="prompt-select" className="w-full" data-testid="select-prompt">
@@ -113,164 +207,238 @@ export default function Home() {
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-
-              {selectedPromptId !== "1" && (
-                <div className="p-4 rounded-md bg-muted/50 border border-border">
-                  <p className="text-sm font-medium text-foreground italic leading-relaxed">
+                {selectedPrompt.id !== "1" && (
+                  <p className="text-sm text-muted-foreground mt-2 italic leading-relaxed">
                     "{selectedPrompt.text}"
                   </p>
-                </div>
-              )}
+                )}
+              </div>
 
-              <div className="pt-4 flex justify-center">
-                <Button 
-                  size="lg" 
-                  onClick={handleToggleRecord}
-                  variant={isRecording ? "destructive" : "default"}
-                  className="w-full sm:w-auto min-w-[200px] h-14 text-base font-semibold transition-all duration-200 shadow-lg"
-                  data-testid="button-record"
-                >
-                  {isRecording ? (
-                    <>
-                      <Square className="mr-2 h-5 w-5 fill-current animate-pulse-fast" />
-                      Stop Recording
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="mr-2 h-5 w-5" />
-                      Start Recording
-                    </>
+              {/* Camera preview while not recording */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Video className="w-4 h-4" />
+                  Camera Preview
+                </Label>
+                <div className="relative aspect-video bg-muted rounded-xl overflow-hidden border border-border">
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    playsInline
+                    muted
+                  />
+                  {!isRecording && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
+                      <VideoOff className="w-8 h-8 text-muted-foreground opacity-60" />
+                      <p className="text-xs text-muted-foreground">Camera starts when you record</p>
+                    </div>
                   )}
-                </Button>
+                  {isRecording && (
+                    <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 rounded-full px-3 py-1">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      <span className="text-xs text-white font-medium">Recording</span>
+                    </div>
+                  )}
+                </div>
+                {hasPermission === false && (
+                  <p className="text-xs text-destructive">
+                    Camera & microphone access denied. Please allow permissions and try again.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Transcription Loading State */}
+        {/* Record Button */}
+        {showSetup && (
+          <Button
+            onClick={handleToggleRecord}
+            size="lg"
+            variant={isRecording ? "destructive" : "default"}
+            className="w-full gap-3 h-14 text-base"
+            data-testid="btn-record"
+            disabled={transcribeMutation.isPending}
+          >
+            {isRecording ? (
+              <><Square className="w-5 h-5" /> Stop Recording</>
+            ) : (
+              <><Mic className="w-5 h-5" /> Start Recording</>
+            )}
+          </Button>
+        )}
+
+        {/* Processing */}
         {transcribeMutation.isPending && (
-          <Card className="border-border bg-card shadow-sm border-primary/20">
-            <CardContent className="p-8 flex flex-col items-center justify-center space-y-4">
-              <div className="w-12 h-12 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-              <p className="text-lg font-medium text-primary animate-pulse">Transcribing audio...</p>
+          <Card className="border-border bg-card shadow-sm">
+            <CardContent className="pt-6 pb-4 space-y-3">
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <span className="text-sm">Transcribing and analyzing your presentation…</span>
+              </div>
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5" />
+              <Skeleton className="h-4 w-3/5" />
             </CardContent>
           </Card>
         )}
 
-        {/* Transcript & Evaluation Section */}
-        {transcribeMutation.data && !transcribeMutation.isPending && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-border bg-card shadow-sm">
-              <CardHeader className="pb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <CardTitle className="text-lg">Transcript & Analysis</CardTitle>
-                  <div className="flex items-center gap-4 text-sm bg-muted/50 py-1.5 px-3 rounded-full border border-border">
-                    <span className="text-muted-foreground font-mono">Duration: {transcribeMutation.data.durationSeconds.toFixed(1)}s</span>
-                    <div className="w-px h-4 bg-border" />
-                    <span className={`font-mono font-bold ${wpmColor}`} data-testid="text-wpm">
-                      {Math.round(wpm)} WPM
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                
-                <div className="p-5 rounded-md bg-muted/30 border border-border/50 min-h-[100px] max-h-[300px] overflow-y-auto">
-                  <p className="text-base leading-relaxed text-foreground font-serif">
-                    <HighlightedTranscript text={transcribeMutation.data.transcript} />
-                  </p>
-                </div>
+        {/* Results */}
+        {showResults && (
+          <div className="space-y-5">
+            {/* Prompt reminder */}
+            {selectedPrompt.id !== "1" && (
+              <div className="px-4 py-3 rounded-lg bg-muted/30 border border-border/50">
+                <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Question</p>
+                <p className="text-sm italic text-foreground/80">"{selectedPrompt.text}"</p>
+              </div>
+            )}
 
-                {wpmStatus !== "neutral" && (
-                  <div className={`p-3 rounded-md text-sm flex items-start gap-2 ${
-                    wpmStatus === "error" ? "bg-red-500/10 text-red-400 border border-red-500/20" :
-                    wpmStatus === "warning" ? "bg-orange-500/10 text-orange-400 border border-orange-500/20" :
-                    "bg-green-500/10 text-green-400 border border-green-500/20"
-                  }`}>
-                    {wpmStatus === "success" ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
-                    <div>
-                      <span className="font-semibold block mb-0.5">
-                        {wpmStatus === "error" ? "Speaking rate is too fast." : wpmStatus === "warning" ? "Speaking rate is too slow." : "Perfect speaking rate."}
-                      </span>
-                      <span>Target: 130-150 WPM. Fast speech can project nervousness; slow speech may lose the panel's attention.</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex gap-4 pt-2">
-                  {!evaluateMutation.data && !evaluateMutation.isPending && (
-                    <Button 
-                      className="w-full" 
-                      onClick={handleEvaluate}
-                      data-testid="button-evaluate"
-                    >
-                      Generate AI Feedback
-                      <ChevronRight className="ml-2 w-4 h-4" />
-                    </Button>
-                  )}
-                  <Button variant="outline" onClick={handleReset} data-testid="button-rerecord">
-                    <RefreshCcw className="mr-2 w-4 h-4" />
-                    Discard & Retry
-                  </Button>
-                </div>
-
-              </CardContent>
-            </Card>
-
-            {/* Evaluation Loading State */}
-            {evaluateMutation.isPending && (
-              <Card className="border-border bg-card shadow-sm border-primary/20">
-                <CardContent className="p-8 space-y-6">
-                  <div className="flex items-center gap-4 text-primary mb-6">
-                    <div className="w-6 h-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                    <p className="font-medium">Evaluating response structure and delivery...</p>
-                  </div>
-                  <div className="space-y-4">
-                    <Skeleton className="h-4 w-3/4 bg-muted" />
-                    <Skeleton className="h-4 w-full bg-muted" />
-                    <Skeleton className="h-4 w-5/6 bg-muted" />
-                  </div>
+            {/* Video Playback */}
+            {videoUrl && (
+              <Card className="border-border bg-card shadow-sm">
+                <CardHeader className="pb-3 border-b border-border/50">
+                  <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <Video className="w-4 h-4" />
+                    Your Recording
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <video
+                    src={videoUrl}
+                    controls
+                    className="w-full rounded-lg max-h-64 bg-black"
+                    playsInline
+                  />
                 </CardContent>
               </Card>
             )}
 
-            {/* Evaluation Results */}
-            {parsedFeedback && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* Scores & Critique */}
-                  <div className="space-y-6">
-                    {parsedFeedback.scores && (
-                      <Card className="bg-card border-border shadow-sm h-full">
-                        <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
-                          <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Partner Panel Scores</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                          <div className="prose prose-sm dark:prose-invert max-w-none text-sm whitespace-pre-wrap font-mono">
-                            {parsedFeedback.scores}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
+            {/* Body Language Analysis */}
+            {transcribeMutation.data?.bodyLanguageAnalysis && (
+              <Card className="border-border bg-card shadow-sm">
+                <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                    <Video className="w-4 h-4" />
+                    Body Language & Presence
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <p className="text-sm leading-relaxed">{transcribeMutation.data.bodyLanguageAnalysis}</p>
+                </CardContent>
+              </Card>
+            )}
 
-                  <div className="space-y-6">
-                    {parsedFeedback.followUp && (
-                      <Card className="bg-primary/5 border-primary/20 shadow-sm h-full">
-                        <CardHeader className="pb-3 border-b border-primary/10">
-                          <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary">Panel Follow-Up Question</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-4">
-                          <div className="prose prose-sm dark:prose-invert max-w-none text-base italic font-serif leading-relaxed text-foreground">
-                            "{parsedFeedback.followUp}"
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
+            {/* Speech Metrics */}
+            {wpmInfo && (
+              <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-muted/30 border border-border/50">
+                <wpmInfo.icon className={`w-5 h-5 ${wpmInfo.color}`} />
+                <div className="flex-1">
+                  <span className={`text-lg font-bold ${wpmInfo.color}`}>{wpm} WPM</span>
+                  <span className="text-muted-foreground text-sm ml-2">— {wpmInfo.label}</span>
                 </div>
+                <span className="text-xs text-muted-foreground">
+                  {transcribeMutation.data?.wordCount} words · {Math.round(transcribeMutation.data?.durationSeconds ?? 0)}s
+                </span>
+              </div>
+            )}
+
+            {/* Transcript */}
+            <Card className="border-border bg-card shadow-sm">
+              <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Transcript</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="text-sm leading-relaxed">
+                  <HighlightedTranscript text={transcribeMutation.data?.transcript ?? ""} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  <span className="inline-block w-3 h-3 rounded-sm bg-red-500/30 border border-red-500/60 mr-1" />filler words ·
+                  <span className="inline-block w-3 h-3 rounded-sm bg-orange-500/30 border border-orange-500/60 mr-1 ml-2" />hedging language
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Get AI Coaching Button */}
+            {!evaluateMutation.data && !evaluateMutation.isPending && (
+              <Button
+                onClick={handleEvaluate}
+                size="lg"
+                className="w-full gap-3 h-14 text-base"
+                data-testid="btn-evaluate"
+              >
+                <ChevronRight className="w-5 h-5" />
+                Get AI Coaching Feedback
+              </Button>
+            )}
+
+            {/* AI Coaching Loading */}
+            {evaluateMutation.isPending && (
+              <Card className="border-border bg-card shadow-sm">
+                <CardContent className="pt-6 pb-4 space-y-3">
+                  <div className="flex items-center gap-3 text-muted-foreground">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                    <span className="text-sm">Senior Partner is reviewing your response…</span>
+                  </div>
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-4/6" />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* AI Feedback Sections */}
+            {parsedFeedback && (
+              <div className="space-y-4">
+                {/* TTS + Save controls */}
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSpeak}
+                    disabled={speakMutation.isPending}
+                    className="gap-2"
+                    data-testid="btn-speak"
+                  >
+                    {speakMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : isSpeaking ? (
+                      <VolumeX className="w-4 h-4" />
+                    ) : (
+                      <Volume2 className="w-4 h-4" />
+                    )}
+                    {isSpeaking ? "Stop" : "Listen to Feedback"}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveSession}
+                    disabled={saveSessionMutation.isPending || sessionSaved}
+                    className="gap-2"
+                    data-testid="btn-save"
+                  >
+                    {saveSessionMutation.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : sessionSaved ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <BookmarkPlus className="w-4 h-4" />
+                    )}
+                    {sessionSaved ? "Saved" : "Save Session"}
+                  </Button>
+                </div>
+
+                {parsedFeedback.scores && (
+                  <Card className="bg-card border-border shadow-sm">
+                    <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Partner Panel Scores</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="text-sm whitespace-pre-wrap leading-relaxed font-mono">{parsedFeedback.scores}</div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {parsedFeedback.critique && (
                   <Card className="bg-card border-border shadow-sm">
@@ -278,9 +446,7 @@ export default function Home() {
                       <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">The Critique</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-sm whitespace-pre-wrap leading-relaxed">
-                        {parsedFeedback.critique}
-                      </div>
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap">{parsedFeedback.critique}</div>
                     </CardContent>
                   </Card>
                 )}
@@ -291,14 +457,42 @@ export default function Home() {
                       <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">BLUF Rewrite</CardTitle>
                     </CardHeader>
                     <CardContent className="pt-4">
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-sm whitespace-pre-wrap leading-relaxed pl-4 border-l-2 border-primary/50">
+                      <div className="text-sm whitespace-pre-wrap leading-relaxed pl-4 border-l-2 border-primary/50">
                         {parsedFeedback.rewrite}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {parsedFeedback.followUp && (
+                  <Card className="bg-card border-border shadow-sm">
+                    <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Panel Follow-Up</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="text-sm leading-relaxed italic text-foreground/90 pl-4 border-l-2 border-yellow-500/50">
+                        {parsedFeedback.followUp}
                       </div>
                     </CardContent>
                   </Card>
                 )}
               </div>
             )}
+
+            {/* Reset */}
+            <Button variant="outline" onClick={handleReset} className="w-full gap-2" data-testid="btn-reset">
+              <RefreshCcw className="w-4 h-4" />
+              Start New Practice
+            </Button>
+          </div>
+        )}
+
+        {/* Error */}
+        {(transcribeMutation.isError || evaluateMutation.isError) && (
+          <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/10 text-sm text-destructive">
+            {transcribeMutation.isError
+              ? "Transcription failed. Please try again."
+              : "Coaching feedback failed. Please try again."}
           </div>
         )}
       </div>

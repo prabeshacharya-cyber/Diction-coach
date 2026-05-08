@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface EvaluationResult {
-  feedback: string;
+export interface SpeakResult {
+  /** Base64-encoded MP3 audio */
+  audioBase64: string;
 }

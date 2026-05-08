@@ -7,10 +7,12 @@
  */
 
 export interface TranscribeRequest {
-  /** Base64-encoded audio data (WAV or WebM) */
+  /** Base64-encoded audio data */
   audioBase64: string;
-  /** MIME type of the audio (e.g. audio/wav, audio/webm) */
+  /** MIME type of the audio */
   mimeType?: string;
   /** Actual recording duration in seconds (measured client-side) */
   durationSeconds?: number;
+  /** Base64-encoded JPEG video frames for body language analysis */
+  videoFrames?: string[];
 }

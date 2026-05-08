@@ -6,6 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface EvaluationResult {
-  feedback: string;
+export interface ErrorEnvelope {
+  error: string;
 }

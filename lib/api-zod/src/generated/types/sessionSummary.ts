@@ -6,10 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface EvaluateRequest {
-  transcript: string;
+export interface SessionSummary {
+  id: string;
   promptLabel?: string;
-  promptText?: string;
-  /** Body language analysis to incorporate into feedback */
+  wpm: number;
+  wordCount: number;
+  durationSeconds: number;
+  createdAt: string;
+  transcript: string;
+  feedback?: string;
   bodyLanguageAnalysis?: string;
 }
