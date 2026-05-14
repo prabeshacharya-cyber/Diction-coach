@@ -3,8 +3,8 @@ import { useAuth } from "@workspace/replit-auth-web";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mic, Clock, Zap, Calendar, TrendingUp } from "lucide-react";
-import { parseFeedback, parseScores } from "@/lib/parse-feedback";
+import { ArrowLeft, Mic, Clock, Zap, Calendar, TrendingUp, Activity } from "lucide-react";
+import { parseFeedback, parseScores, scoreRingColor } from "@/lib/parse-feedback";
 
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -19,15 +19,8 @@ function formatDuration(seconds: number) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function scoreColor(score: number) {
-  if (score >= 8) return "#22c55e";
-  if (score >= 6) return "#3b82f6";
-  if (score >= 4) return "#f59e0b";
-  return "#ef4444";
-}
-
 function MiniScoreBadge({ label, score }: { label: string; score: number }) {
-  const color = scoreColor(score);
+  const color = scoreRingColor(label, score);
   const shortLabel = label.split("&")[0].split(" ").slice(0, 2).join(" ").trim();
   return (
     <div className="flex flex-col items-center gap-0.5">
@@ -98,6 +91,65 @@ export default function History() {
           </div>
         )}
 
+        {/* Voice Fingerprint */}
+        {sessions.length >= 2 && (() => {
+          const allParsed = sessions
+            .filter(s => s.feedback)
+            .map(s => parseScores(parseFeedback(s.feedback!).scores));
+
+          // Build per-label averages across sessions
+          const labelTotals: Record<string, { sum: number; count: number }> = {};
+          for (const sessionScores of allParsed) {
+            for (const { label, score } of sessionScores) {
+              const key = label.split("(")[0].trim();
+              if (!labelTotals[key]) labelTotals[key] = { sum: 0, count: 0 };
+              labelTotals[key].sum += score;
+              labelTotals[key].count += 1;
+            }
+          }
+          const fingerprint = Object.entries(labelTotals)
+            .filter(([, v]) => v.count >= 2)
+            .map(([label, { sum, count }]) => ({ label, avg: Math.round((sum / count) * 10) / 10 }))
+            .sort((a, b) => b.avg - a.avg);
+
+          if (fingerprint.length === 0) return null;
+
+          return (
+            <Card className="border-border bg-card shadow-sm">
+              <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                    Voice Fingerprint
+                  </CardTitle>
+                  <span className="text-xs text-muted-foreground ml-auto">{sessions.length} sessions</span>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-2.5">
+                {fingerprint.map(({ label, avg }) => {
+                  const color = scoreRingColor(label, Math.round(avg));
+                  const pct = (avg / 10) * 100;
+                  return (
+                    <div key={label} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground font-medium">{label}</span>
+                        <span className="font-bold" style={{ color }}>{avg}</span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${pct}%`, backgroundColor: color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-[10px] text-muted-foreground pt-1">Running averages across all saved sessions.</p>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         {/* Loading */}
         {isLoading && (
           <div className="space-y-3">
@@ -153,7 +205,7 @@ export default function History() {
                     {/* Overall score badge */}
                     {avg !== null && (
                       <div className="text-center shrink-0">
-                        <div className="text-2xl font-bold" style={{ color: scoreColor(Math.round(avg)) }}>
+                        <div className="text-2xl font-bold" style={{ color: scoreRingColor("overall", Math.round(avg)) }}>
                           {avg.toFixed(1)}
                         </div>
                         <div className="text-[10px] text-muted-foreground">/ 10</div>

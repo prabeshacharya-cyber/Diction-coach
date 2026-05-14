@@ -9,7 +9,7 @@ import {
 import { useAuth } from "@workspace/replit-auth-web";
 import { useVideoRecorder } from "@/hooks/use-video-recorder";
 import { HighlightedTranscript } from "@/lib/highlight-transcript";
-import { parseFeedback, parseScores, countFillerWords } from "@/lib/parse-feedback";
+import { parseFeedback, parseScores, scoreRingColor, countFillerWords } from "@/lib/parse-feedback";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,7 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Mic, Square, Activity, ChevronRight, CheckCircle2, AlertTriangle,
   RefreshCcw, Headphones, StopCircle, History, LogOut, Video, VideoOff,
-  User, Loader2, BookmarkPlus, Check, MessageSquareQuote, FileText, HelpCircle
+  User, Loader2, BookmarkPlus, Check, MessageSquareQuote, FileText, HelpCircle, Dumbbell
 } from "lucide-react";
 
 const PROMPTS = [
@@ -39,19 +39,12 @@ function wpmBand(wpm: number) {
   return { label: "Acceptable", color: "text-primary", bg: "bg-primary", icon: CheckCircle2 };
 }
 
-function scoreColor(score: number) {
-  if (score >= 8) return "#22c55e";
-  if (score >= 6) return "#3b82f6";
-  if (score >= 4) return "#f59e0b";
-  return "#ef4444";
-}
-
 function ScoreRing({ label, score, animated }: { label: string; score: number; animated: boolean }) {
   const radius = 28;
   const circumference = 2 * Math.PI * radius;
   const pct = Math.min(10, Math.max(0, score)) / 10;
   const dashOffset = animated ? circumference * (1 - pct) : circumference;
-  const color = scoreColor(score);
+  const color = scoreRingColor(label, score);
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -553,7 +546,7 @@ export default function Home() {
                   <Card className="bg-card border-border shadow-sm">
                     <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
                       <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                        Partner Panel Scores
+                        The Four C's
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-5 pb-4">
@@ -568,7 +561,7 @@ export default function Home() {
                           <span className="text-sm text-muted-foreground">Overall</span>
                           <span
                             className="text-2xl font-bold"
-                            style={{ color: scoreColor(Math.round(parsedScores.reduce((s, x) => s + x.score, 0) / parsedScores.length)) }}
+                            style={{ color: scoreRingColor("overall", Math.round(parsedScores.reduce((s, x) => s + x.score, 0) / parsedScores.length)) }}
                           >
                             {(parsedScores.reduce((s, x) => s + x.score, 0) / parsedScores.length).toFixed(1)}
                           </span>
@@ -620,7 +613,21 @@ export default function Home() {
                   </Card>
                 )}
 
-                {/* BLUF Rewrite */}
+                {/* Today's Drill */}
+                {parsedFeedback.drill && (
+                  <Card className="bg-card border-border shadow-sm border-primary/20">
+                    <CardHeader className="pb-3 border-b border-border/50 bg-primary/5">
+                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-primary flex items-center gap-2">
+                        <Dumbbell className="w-4 h-4" />
+                        Today's Drill
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4">
+                      <div className="text-sm leading-relaxed whitespace-pre-wrap">{parsedFeedback.drill}</div>
+                    </CardContent>
+                  </Card>
+                )}
+
                 {parsedFeedback.rewrite && (
                   <Card className="bg-card border-border shadow-sm">
                     <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">

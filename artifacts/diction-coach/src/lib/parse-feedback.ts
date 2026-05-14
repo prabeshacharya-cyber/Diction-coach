@@ -2,8 +2,9 @@ export function parseFeedback(markdown: string) {
   const sections = {
     scores: "",
     critique: "",
+    drill: "",
     rewrite: "",
-    followUp: ""
+    followUp: "",
   };
 
   if (!markdown) return sections;
@@ -13,10 +14,12 @@ export function parseFeedback(markdown: string) {
 
   for (const line of lines) {
     const lowerLine = line.toLowerCase();
-    if (lowerLine.includes("partner panel scores")) {
+    if (lowerLine.includes("partner panel scores") || lowerLine.includes("the four c")) {
       currentSection = "scores";
     } else if (lowerLine.includes("the critique")) {
       currentSection = "critique";
+    } else if (lowerLine.includes("today's drill") || lowerLine.includes("todays drill")) {
+      currentSection = "drill";
     } else if (lowerLine.includes("bluf rewrite") || lowerLine.includes("the pointed rewrite") || lowerLine.includes("pointed rewrite")) {
       currentSection = "rewrite";
     } else if (lowerLine.includes("panel follow-up question") || lowerLine.includes("follow up") || lowerLine.includes("follow-up")) {
@@ -50,6 +53,27 @@ export function parseScores(scoresText: string): { label: string; score: number 
     }
   }
   return results;
+}
+
+// Fixed Four C's brand colors — always use these regardless of score value
+const FOUR_CS_COLORS: Record<string, string> = {
+  clarity: "#60a5fa",      // blue
+  confidence: "#fbbf24",   // amber
+  conciseness: "#34d399",  // green
+  connection: "#fb7185",   // rose
+  presence: "#a78bfa",     // purple
+};
+
+export function scoreRingColor(label: string, score: number): string {
+  const key = label.toLowerCase().split(/\s*[\(&]/)[0].trim();
+  for (const [keyword, color] of Object.entries(FOUR_CS_COLORS)) {
+    if (key.includes(keyword)) return color;
+  }
+  // Fallback: performance-based coloring
+  if (score >= 8) return "#22c55e";
+  if (score >= 6) return "#3b82f6";
+  if (score >= 4) return "#f59e0b";
+  return "#ef4444";
 }
 
 const ALL_FILLERS = [
