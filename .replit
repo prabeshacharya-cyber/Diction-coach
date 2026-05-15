@@ -33,3 +33,8 @@ externalPort = 3000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+GITHUB_REPO_URL = "https://github.com/prabeshacharya-cyber/Diction-coach"
