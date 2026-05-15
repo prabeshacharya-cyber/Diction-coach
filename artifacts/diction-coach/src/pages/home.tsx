@@ -5,6 +5,8 @@ import {
   useEvaluateTranscript,
   useSpeakFeedback,
   useSaveSession,
+  useGetModels,
+  getGetModelsQueryKey,
 } from "@workspace/api-client-react";
 import { useAuth } from "@workspace/replit-auth-web";
 import { useVideoRecorder } from "@/hooks/use-video-recorder";
@@ -19,7 +21,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Mic, Square, Activity, ChevronRight, CheckCircle2, AlertTriangle,
   RefreshCcw, Headphones, StopCircle, History, LogOut, Video, VideoOff,
-  User, Loader2, BookmarkPlus, Check, MessageSquareQuote, FileText, HelpCircle, Dumbbell
+  User, Loader2, BookmarkPlus, Check, MessageSquareQuote, FileText, HelpCircle, Dumbbell, Cpu
 } from "lucide-react";
 
 const PROMPTS = [
@@ -96,6 +98,7 @@ export default function Home() {
   const [, navigate] = useLocation();
   const { user, logout } = useAuth();
   const [selectedPromptId, setSelectedPromptId] = useState("1");
+  const [selectedModelId, setSelectedModelId] = useState("claude");
   const selectedPrompt = PROMPTS.find(p => p.id === selectedPromptId) || PROMPTS[0];
 
   const { isRecording, audioLevel, videoUrl, videoRef, hasPermission, startRecording, stopRecording, reset: resetRecorder } = useVideoRecorder();
@@ -103,6 +106,9 @@ export default function Home() {
   const evaluateMutation = useEvaluateTranscript();
   const speakMutation = useSpeakFeedback();
   const saveSessionMutation = useSaveSession();
+
+  const { data: modelsData } = useGetModels({ query: { queryKey: getGetModelsQueryKey() } });
+  const models = modelsData?.models ?? [];
 
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [sessionSaved, setSessionSaved] = useState(false);
@@ -121,7 +127,9 @@ export default function Home() {
     ? countFillerWords(transcribeMutation.data.transcript)
     : [];
 
-  const totalFillers = fillerCounts.reduce((sum, f) => sum + f.count, 0);
+  const totalFillers = transcribeMutation.data?.fillerCount
+    ?? fillerCounts.reduce((sum, f) => sum + f.count, 0);
+
   const fillerDensity = transcribeMutation.data
     ? ((totalFillers / (transcribeMutation.data.durationSeconds / 60))).toFixed(1)
     : "0";
@@ -173,6 +181,7 @@ export default function Home() {
         promptLabel: selectedPrompt.label,
         promptText: selectedPrompt.text,
         bodyLanguageAnalysis: transcribeMutation.data.bodyLanguageAnalysis ?? undefined,
+        modelId: selectedModelId,
       },
     });
   };
@@ -201,17 +210,31 @@ export default function Home() {
 
   const handleSaveSession = () => {
     if (!transcribeMutation.data) return;
+
+    const scoreMap: Record<string, number> = {};
+    for (const { label, score } of parsedScores) {
+      const l = label.toLowerCase();
+      if (l.includes("clarity")) scoreMap.clarityScore = score;
+      else if (l.includes("confidence")) scoreMap.confidenceScore = score;
+      else if (l.includes("conciseness")) scoreMap.concisenessScore = score;
+      else if (l.includes("connection")) scoreMap.connectionScore = score;
+    }
+
     saveSessionMutation.mutate(
       {
         data: {
           promptLabel: selectedPrompt.id === "1" ? undefined : selectedPrompt.label,
           promptText: selectedPrompt.id === "1" ? undefined : selectedPrompt.text,
           transcript: transcribeMutation.data.transcript,
+          highlightedTranscript: transcribeMutation.data.highlightedTranscript ?? undefined,
           wordCount: transcribeMutation.data.wordCount,
           wpm: transcribeMutation.data.wpm,
           durationSeconds: Math.round(transcribeMutation.data.durationSeconds),
           feedback: evaluateMutation.data?.feedback ?? undefined,
           bodyLanguageAnalysis: transcribeMutation.data.bodyLanguageAnalysis ?? undefined,
+          modelUsed: evaluateMutation.data?.modelUsed ?? undefined,
+          fillerCount: totalFillers,
+          ...scoreMap,
         },
       },
       { onSuccess: () => setSessionSaved(true) }
@@ -231,6 +254,12 @@ export default function Home() {
 
   const showSetup = !transcribeMutation.data && !transcribeMutation.isPending;
   const showResults = !!transcribeMutation.data;
+
+  // Group models for the selector
+  const modelGroups = models.reduce<Record<string, typeof models>>((acc, m) => {
+    (acc[m.group] ??= []).push(m);
+    return acc;
+  }, {});
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col items-center py-10 px-4 font-sans">
@@ -293,6 +322,45 @@ export default function Home() {
                   </p>
                 )}
               </div>
+
+              {/* AI Model Selector */}
+              {models.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="model-select" className="flex items-center gap-2">
+                    <Cpu className="w-4 h-4 text-muted-foreground" />
+                    AI Coaching Model
+                  </Label>
+                  <Select value={selectedModelId} onValueChange={setSelectedModelId}>
+                    <SelectTrigger id="model-select" className="w-full" data-testid="select-model">
+                      <SelectValue placeholder="Select a model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(modelGroups).map(([group, groupModels]) => (
+                        <div key={group}>
+                          <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                            {group}
+                          </div>
+                          {groupModels.map(m => (
+                            <SelectItem key={m.id} value={m.id}>
+                              {m.name}
+                            </SelectItem>
+                          ))}
+                        </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedModelId !== "claude" && !selectedModelId.startsWith("gemini/") && (
+                    <p className="text-xs text-muted-foreground">
+                      Requires <span className="font-mono text-foreground/70">DEEPINFRA_API_KEY</span> in environment secrets.
+                    </p>
+                  )}
+                  {selectedModelId.startsWith("gemini/") && (
+                    <p className="text-xs text-muted-foreground">
+                      Requires <span className="font-mono text-foreground/70">GEMINI_API_KEY</span> in environment secrets.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Camera preview */}
               <div className="space-y-2">
@@ -420,7 +488,6 @@ export default function Home() {
                     </div>
                     <div className="relative">
                       <Progress value={wpmProgress} className="h-2" />
-                      {/* Zone markers */}
                       <div className="flex justify-between mt-1 text-[10px] text-muted-foreground/60">
                         <span>60</span>
                         <span>110</span>
@@ -500,7 +567,13 @@ export default function Home() {
               </CardHeader>
               <CardContent className="pt-4">
                 <div className="text-sm leading-relaxed">
-                  <HighlightedTranscript text={transcribeMutation.data?.transcript ?? ""} />
+                  {transcribeMutation.data?.highlightedTranscript ? (
+                    <span
+                      dangerouslySetInnerHTML={{ __html: transcribeMutation.data.highlightedTranscript }}
+                    />
+                  ) : (
+                    <HighlightedTranscript text={transcribeMutation.data?.transcript ?? ""} />
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-3">
                   <span className="inline-block w-3 h-3 rounded-sm bg-red-500/30 border border-red-500/60 mr-1" />filler words ·
@@ -545,9 +618,17 @@ export default function Home() {
                 {parsedScores.length > 0 && (
                   <Card className="bg-card border-border shadow-sm">
                     <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
-                      <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                        The Four C's
-                      </CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                          The Four C's
+                        </CardTitle>
+                        {evaluateMutation.data?.modelUsed && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Cpu className="w-3 h-3" />
+                            {evaluateMutation.data.modelUsed.split("/").pop()?.replace(/-latest$/, "") ?? evaluateMutation.data.modelUsed}
+                          </span>
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="pt-5 pb-4">
                       <div className="flex flex-wrap justify-center gap-6 sm:gap-10">
@@ -555,7 +636,6 @@ export default function Home() {
                           <ScoreRing key={label} label={label} score={score} animated={scoresAnimated} />
                         ))}
                       </div>
-                      {/* Aggregate */}
                       {parsedScores.length > 1 && (
                         <div className="mt-5 pt-4 border-t border-border/50 flex items-center justify-center gap-3">
                           <span className="text-sm text-muted-foreground">Overall</span>
@@ -572,7 +652,7 @@ export default function Home() {
                   </Card>
                 )}
 
-                {/* Voice Coaching Button — Prominent */}
+                {/* Voice Coaching Button */}
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <Headphones className="w-4 h-4 text-primary" />
@@ -644,7 +724,6 @@ export default function Home() {
                   </Card>
                 )}
 
-                {/* Follow-Up Question */}
                 {parsedFeedback.followUp && (
                   <Card className="bg-card border-border shadow-sm">
                     <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">

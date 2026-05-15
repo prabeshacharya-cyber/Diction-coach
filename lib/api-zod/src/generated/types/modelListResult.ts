@@ -5,8 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ModelInfo } from "./modelInfo";
 
-export interface EvaluationResult {
-  feedback: string;
-  modelUsed?: string;
+export interface ModelListResult {
+  models: ModelInfo[];
+  default: string;
 }

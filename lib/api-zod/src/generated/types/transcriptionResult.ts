@@ -8,9 +8,13 @@
 
 export interface TranscriptionResult {
   transcript: string;
+  /** HTML transcript with filler/hedge words highlighted */
+  highlightedTranscript?: string;
   durationSeconds: number;
   wordCount: number;
   wpm: number;
+  /** Number of filler/hedge words detected */
+  fillerCount?: number;
   /** AI analysis of body language from video frames */
   bodyLanguageAnalysis?: string;
 }

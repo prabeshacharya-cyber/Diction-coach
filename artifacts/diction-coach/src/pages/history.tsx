@@ -1,9 +1,12 @@
-import { useGetSessions, getGetSessionsQueryKey } from "@workspace/api-client-react";
+import {
+  useGetSessions, getGetSessionsQueryKey,
+  useGetVoiceProfile, getGetVoiceProfileQueryKey,
+} from "@workspace/api-client-react";
 import { useAuth } from "@workspace/replit-auth-web";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mic, Clock, Zap, Calendar, TrendingUp, Activity } from "lucide-react";
+import { ArrowLeft, Mic, Clock, Zap, Calendar, TrendingUp, Activity, Cpu } from "lucide-react";
 import { parseFeedback, parseScores, scoreRingColor } from "@/lib/parse-feedback";
 
 function formatDate(iso: string) {
@@ -36,15 +39,64 @@ function wpmColor(wpm: number) {
   return "text-green-400";
 }
 
+// Map stored score columns to label/score pairs matching the Four C's brand colors
+function storedScoresToPairs(session: {
+  clarityScore?: number;
+  confidenceScore?: number;
+  concisenessScore?: number;
+  connectionScore?: number;
+}) {
+  const pairs: { label: string; score: number }[] = [];
+  if (session.clarityScore != null) pairs.push({ label: "Clarity", score: Math.round(session.clarityScore) });
+  if (session.confidenceScore != null) pairs.push({ label: "Confidence", score: Math.round(session.confidenceScore) });
+  if (session.concisenessScore != null) pairs.push({ label: "Conciseness", score: Math.round(session.concisenessScore) });
+  if (session.connectionScore != null) pairs.push({ label: "Connection", score: Math.round(session.connectionScore) });
+  return pairs;
+}
+
 export default function History() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { data, isLoading } = useGetSessions({ query: { queryKey: getGetSessionsQueryKey(), enabled: !!user } });
+  const { data: voiceProfile } = useGetVoiceProfile({ query: { queryKey: getGetVoiceProfileQueryKey(), enabled: !!user } });
 
   const sessions = data?.sessions ?? [];
   const avgWpm = sessions.length
     ? Math.round(sessions.reduce((s, x) => s + x.wpm, 0) / sessions.length)
     : null;
+
+  // Build voice fingerprint from server profile (preferred) or fall back to client-side computation
+  const serverFingerprint = voiceProfile && voiceProfile.totalSessions >= 2
+    ? [
+        { label: "Clarity", avg: voiceProfile.avgClarity },
+        { label: "Confidence", avg: voiceProfile.avgConfidence },
+        { label: "Conciseness", avg: voiceProfile.avgConciseness },
+        { label: "Connection", avg: voiceProfile.avgConnection },
+      ].sort((a, b) => b.avg - a.avg)
+    : null;
+
+  // Client-side fallback fingerprint (for sessions without stored scores)
+  const clientFingerprint = (() => {
+    if (serverFingerprint) return null;
+    const allParsed = sessions
+      .filter(s => s.feedback)
+      .map(s => parseScores(parseFeedback(s.feedback!).scores));
+    const labelTotals: Record<string, { sum: number; count: number }> = {};
+    for (const sessionScores of allParsed) {
+      for (const { label, score } of sessionScores) {
+        const key = label.split("(")[0].trim();
+        if (!labelTotals[key]) labelTotals[key] = { sum: 0, count: 0 };
+        labelTotals[key].sum += score;
+        labelTotals[key].count += 1;
+      }
+    }
+    return Object.entries(labelTotals)
+      .filter(([, v]) => v.count >= 2)
+      .map(([label, { sum, count }]) => ({ label, avg: Math.round((sum / count) * 10) / 10 }))
+      .sort((a, b) => b.avg - a.avg);
+  })();
+
+  const fingerprint = serverFingerprint ?? (clientFingerprint?.length ? clientFingerprint : null);
 
   return (
     <div className="min-h-screen bg-background px-4 py-10 font-sans">
@@ -71,6 +123,8 @@ export default function History() {
               {
                 label: "Best score", icon: TrendingUp, color: "text-green-400",
                 value: (() => {
+                  const stored = sessions.flatMap(s => storedScoresToPairs(s).map(x => x.score));
+                  if (stored.length) return Math.max(...stored);
                   const allScores = sessions.flatMap(s =>
                     s.feedback ? parseScores(parseFeedback(s.feedback).scores).map(x => x.score) : []
                   );
@@ -92,63 +146,44 @@ export default function History() {
         )}
 
         {/* Voice Fingerprint */}
-        {sessions.length >= 2 && (() => {
-          const allParsed = sessions
-            .filter(s => s.feedback)
-            .map(s => parseScores(parseFeedback(s.feedback!).scores));
-
-          // Build per-label averages across sessions
-          const labelTotals: Record<string, { sum: number; count: number }> = {};
-          for (const sessionScores of allParsed) {
-            for (const { label, score } of sessionScores) {
-              const key = label.split("(")[0].trim();
-              if (!labelTotals[key]) labelTotals[key] = { sum: 0, count: 0 };
-              labelTotals[key].sum += score;
-              labelTotals[key].count += 1;
-            }
-          }
-          const fingerprint = Object.entries(labelTotals)
-            .filter(([, v]) => v.count >= 2)
-            .map(([label, { sum, count }]) => ({ label, avg: Math.round((sum / count) * 10) / 10 }))
-            .sort((a, b) => b.avg - a.avg);
-
-          if (fingerprint.length === 0) return null;
-
-          return (
-            <Card className="border-border bg-card shadow-sm">
-              <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
-                <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-primary" />
-                  <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                    Voice Fingerprint
-                  </CardTitle>
-                  <span className="text-xs text-muted-foreground ml-auto">{sessions.length} sessions</span>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4 space-y-2.5">
-                {fingerprint.map(({ label, avg }) => {
-                  const color = scoreRingColor(label, Math.round(avg));
-                  const pct = (avg / 10) * 100;
-                  return (
-                    <div key={label} className="space-y-1">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground font-medium">{label}</span>
-                        <span className="font-bold" style={{ color }}>{avg}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${pct}%`, backgroundColor: color }}
-                        />
-                      </div>
+        {fingerprint && fingerprint.length > 0 && (
+          <Card className="border-border bg-card shadow-sm">
+            <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                <CardTitle className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                  Voice Fingerprint
+                </CardTitle>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  {voiceProfile ? `${voiceProfile.totalSessions} sessions` : `${sessions.length} sessions`}
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-2.5">
+              {fingerprint.map(({ label, avg }) => {
+                const color = scoreRingColor(label, Math.round(avg));
+                const pct = (avg / 10) * 100;
+                return (
+                  <div key={label} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground font-medium">{label}</span>
+                      <span className="font-bold" style={{ color }}>{avg.toFixed(1)}</span>
                     </div>
-                  );
-                })}
-                <p className="text-[10px] text-muted-foreground pt-1">Running averages across all saved sessions.</p>
-              </CardContent>
-            </Card>
-          );
-        })()}
+                    <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-700"
+                        style={{ width: `${pct}%`, backgroundColor: color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-[10px] text-muted-foreground pt-1">
+                {voiceProfile ? "Rolling averages stored server-side across all saved sessions." : "Running averages across all saved sessions."}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Loading */}
         {isLoading && (
@@ -173,10 +208,14 @@ export default function History() {
         {/* Session Cards */}
         <div className="space-y-4">
           {sessions.map((session) => {
-            const parsed = session.feedback ? parseFeedback(session.feedback) : null;
-            const scores = parsed?.scores ? parseScores(parsed.scores) : [];
+            // Prefer stored score columns; fall back to re-parsing feedback
+            const storedScores = storedScoresToPairs(session);
+            const scores = storedScores.length > 0
+              ? storedScores
+              : (session.feedback ? parseScores(parseFeedback(session.feedback).scores) : []);
+
             const avg = scores.length
-              ? (scores.reduce((s, x) => s + x.score, 0) / scores.length)
+              ? scores.reduce((s, x) => s + x.score, 0) / scores.length
               : null;
 
             return (
@@ -200,6 +239,12 @@ export default function History() {
                           <Zap className="w-3 h-3" />
                           {session.wpm} WPM
                         </span>
+                        {session.modelUsed && (
+                          <span className="flex items-center gap-1 text-muted-foreground/60">
+                            <Cpu className="w-3 h-3" />
+                            {session.modelUsed.split("/").pop()?.replace(/-latest$/, "") ?? session.modelUsed}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {/* Overall score badge */}
@@ -221,6 +266,12 @@ export default function History() {
                       {scores.map(({ label, score }) => (
                         <MiniScoreBadge key={label} label={label} score={score} />
                       ))}
+                      {session.fillerCount != null && session.fillerCount > 0 && (
+                        <div className="ml-auto flex flex-col items-center gap-0.5">
+                          <span className="text-lg font-bold text-orange-400">{session.fillerCount}</span>
+                          <span className="text-[10px] text-muted-foreground leading-tight text-center">fillers</span>
+                        </div>
+                      )}
                     </div>
                   )}
 

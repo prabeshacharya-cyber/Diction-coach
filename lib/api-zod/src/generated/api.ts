@@ -16,6 +16,20 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Get available AI models
+ */
+export const GetModelsResponse = zod.object({
+  models: zod.array(
+    zod.object({
+      id: zod.string(),
+      name: zod.string(),
+      group: zod.string(),
+    }),
+  ),
+  default: zod.string(),
+});
+
+/**
  * @summary Transcribe audio and optionally analyze video frames
  */
 export const TranscribeAudioBody = zod.object({
@@ -33,9 +47,17 @@ export const TranscribeAudioBody = zod.object({
 
 export const TranscribeAudioResponse = zod.object({
   transcript: zod.string(),
+  highlightedTranscript: zod
+    .string()
+    .optional()
+    .describe("HTML transcript with filler\/hedge words highlighted"),
   durationSeconds: zod.number(),
   wordCount: zod.number(),
   wpm: zod.number(),
+  fillerCount: zod
+    .number()
+    .optional()
+    .describe("Number of filler\/hedge words detected"),
   bodyLanguageAnalysis: zod
     .string()
     .optional()
@@ -53,10 +75,15 @@ export const EvaluateTranscriptBody = zod.object({
     .string()
     .optional()
     .describe("Body language analysis to incorporate into feedback"),
+  modelId: zod
+    .string()
+    .optional()
+    .describe("Model ID to use for evaluation (defaults to Claude)"),
 });
 
 export const EvaluateTranscriptResponse = zod.object({
   feedback: zod.string(),
+  modelUsed: zod.string().optional(),
 });
 
 /**
@@ -83,8 +110,15 @@ export const GetSessionsResponse = zod.object({
       durationSeconds: zod.number(),
       createdAt: zod.string(),
       transcript: zod.string(),
+      highlightedTranscript: zod.string().optional(),
       feedback: zod.string().optional(),
       bodyLanguageAnalysis: zod.string().optional(),
+      modelUsed: zod.string().optional(),
+      clarityScore: zod.number().optional(),
+      confidenceScore: zod.number().optional(),
+      concisenessScore: zod.number().optional(),
+      connectionScore: zod.number().optional(),
+      fillerCount: zod.number().optional(),
     }),
   ),
 });
@@ -96,16 +130,34 @@ export const SaveSessionBody = zod.object({
   promptLabel: zod.string().optional(),
   promptText: zod.string().optional(),
   transcript: zod.string(),
+  highlightedTranscript: zod.string().optional(),
   wordCount: zod.number(),
   wpm: zod.number(),
   durationSeconds: zod.number(),
   feedback: zod.string().optional(),
   bodyLanguageAnalysis: zod.string().optional(),
+  modelUsed: zod.string().optional(),
+  clarityScore: zod.number().optional(),
+  confidenceScore: zod.number().optional(),
+  concisenessScore: zod.number().optional(),
+  connectionScore: zod.number().optional(),
+  fillerCount: zod.number().optional(),
 });
 
 export const SaveSessionResponse = zod.object({
   id: zod.string(),
   createdAt: zod.string(),
+});
+
+/**
+ * @summary Get the user's rolling Voice Fingerprint averages
+ */
+export const GetVoiceProfileResponse = zod.object({
+  avgClarity: zod.number(),
+  avgConfidence: zod.number(),
+  avgConciseness: zod.number(),
+  avgConnection: zod.number(),
+  totalSessions: zod.number(),
 });
 
 /**

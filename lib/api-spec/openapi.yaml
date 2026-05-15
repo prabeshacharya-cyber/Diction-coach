@@ -27,6 +27,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /models:
+    get:
+      operationId: getModels
+      tags: [coach]
+      summary: Get available AI models
+      responses:
+        "200":
+          description: Model catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelListResult"
   /transcribe:
     post:
       operationId: transcribeAudio
@@ -164,6 +176,26 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /voice-profile:
+    get:
+      operationId: getVoiceProfile
+      tags: [coach]
+      summary: Get the user's rolling Voice Fingerprint averages
+      parameters:
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        "200":
+          description: Voice profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VoiceProfileResult"
+        "401":
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -307,6 +339,50 @@ components:
           type: string
       required:
         - status
+    ModelInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        group:
+          type: string
+      required:
+        - id
+        - name
+        - group
+    ModelListResult:
+      type: object
+      properties:
+        models:
+          type: array
+          items:
+            $ref: "#/components/schemas/ModelInfo"
+        default:
+          type: string
+      required:
+        - models
+        - default
+    VoiceProfileResult:
+      type: object
+      properties:
+        avgClarity:
+          type: number
+        avgConfidence:
+          type: number
+        avgConciseness:
+          type: number
+        avgConnection:
+          type: number
+        totalSessions:
+          type: integer
+      required:
+        - avgClarity
+        - avgConfidence
+        - avgConciseness
+        - avgConnection
+        - totalSessions
     TranscribeRequest:
       type: object
       properties:
@@ -331,12 +407,18 @@ components:
       properties:
         transcript:
           type: string
+        highlightedTranscript:
+          type: string
+          description: HTML transcript with filler/hedge words highlighted
         durationSeconds:
           type: number
         wordCount:
           type: integer
         wpm:
           type: integer
+        fillerCount:
+          type: integer
+          description: Number of filler/hedge words detected
         bodyLanguageAnalysis:
           type: string
           description: AI analysis of body language from video frames
@@ -357,12 +439,17 @@ components:
         bodyLanguageAnalysis:
           type: string
           description: Body language analysis to incorporate into feedback
+        modelId:
+          type: string
+          description: Model ID to use for evaluation (defaults to Claude)
       required:
         - transcript
     EvaluationResult:
       type: object
       properties:
         feedback:
+          type: string
+        modelUsed:
           type: string
       required:
         - feedback
@@ -391,6 +478,8 @@ components:
           type: string
         transcript:
           type: string
+        highlightedTranscript:
+          type: string
         wordCount:
           type: integer
         wpm:
@@ -401,6 +490,18 @@ components:
           type: string
         bodyLanguageAnalysis:
           type: string
+        modelUsed:
+          type: string
+        clarityScore:
+          type: number
+        confidenceScore:
+          type: number
+        concisenessScore:
+          type: number
+        connectionScore:
+          type: number
+        fillerCount:
+          type: integer
       required:
         - transcript
         - wordCount
@@ -442,10 +543,24 @@ components:
           type: string
         transcript:
           type: string
+        highlightedTranscript:
+          type: string
         feedback:
           type: string
         bodyLanguageAnalysis:
           type: string
+        modelUsed:
+          type: string
+        clarityScore:
+          type: number
+        confidenceScore:
+          type: number
+        concisenessScore:
+          type: number
+        connectionScore:
+          type: number
+        fillerCount:
+          type: integer
       required:
         - id
         - wpm

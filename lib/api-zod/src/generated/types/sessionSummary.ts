@@ -14,6 +14,13 @@ export interface SessionSummary {
   durationSeconds: number;
   createdAt: string;
   transcript: string;
+  highlightedTranscript?: string;
   feedback?: string;
   bodyLanguageAnalysis?: string;
+  modelUsed?: string;
+  clarityScore?: number;
+  confidenceScore?: number;
+  concisenessScore?: number;
+  connectionScore?: number;
+  fillerCount?: number;
 }

@@ -28,6 +28,7 @@ import type {
   LogoutSuccess,
   MobileTokenExchangeRequest,
   MobileTokenExchangeSuccess,
+  ModelListResult,
   SaveSessionRequest,
   SaveSessionResult,
   SessionListResult,
@@ -35,6 +36,7 @@ import type {
   SpeakResult,
   TranscribeRequest,
   TranscriptionResult,
+  VoiceProfileResult,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -114,6 +116,73 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get available AI models
+ */
+export const getGetModelsUrl = () => {
+  return `/api/models`;
+};
+
+export const getModels = async (
+  options?: RequestInit,
+): Promise<ModelListResult> => {
+  return customFetch<ModelListResult>(getGetModelsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetModelsQueryKey = () => {
+  return [`/api/models`] as const;
+};
+
+export const getGetModelsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getModels>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getModels>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetModelsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getModels>>> = ({
+    signal,
+  }) => getModels({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getModels>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetModelsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getModels>>
+>;
+export type GetModelsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get available AI models
+ */
+
+export function useGetModels<
+  TData = Awaited<ReturnType<typeof getModels>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getModels>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetModelsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -540,6 +609,81 @@ export const useSaveSession = <
 > => {
   return useMutation(getSaveSessionMutationOptions(options));
 };
+
+/**
+ * @summary Get the user's rolling Voice Fingerprint averages
+ */
+export const getGetVoiceProfileUrl = () => {
+  return `/api/voice-profile`;
+};
+
+export const getVoiceProfile = async (
+  options?: RequestInit,
+): Promise<VoiceProfileResult> => {
+  return customFetch<VoiceProfileResult>(getGetVoiceProfileUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetVoiceProfileQueryKey = () => {
+  return [`/api/voice-profile`] as const;
+};
+
+export const getGetVoiceProfileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getVoiceProfile>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getVoiceProfile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetVoiceProfileQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getVoiceProfile>>> = ({
+    signal,
+  }) => getVoiceProfile({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getVoiceProfile>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetVoiceProfileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getVoiceProfile>>
+>;
+export type GetVoiceProfileQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get the user's rolling Voice Fingerprint averages
+ */
+
+export function useGetVoiceProfile<
+  TData = Awaited<ReturnType<typeof getVoiceProfile>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getVoiceProfile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetVoiceProfileQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get the currently authenticated user

@@ -9,6 +9,25 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface ModelInfo {
+  id: string;
+  name: string;
+  group: string;
+}
+
+export interface ModelListResult {
+  models: ModelInfo[];
+  default: string;
+}
+
+export interface VoiceProfileResult {
+  avgClarity: number;
+  avgConfidence: number;
+  avgConciseness: number;
+  avgConnection: number;
+  totalSessions: number;
+}
+
 export interface TranscribeRequest {
   /** Base64-encoded audio data */
   audioBase64: string;
@@ -22,9 +41,13 @@ export interface TranscribeRequest {
 
 export interface TranscriptionResult {
   transcript: string;
+  /** HTML transcript with filler/hedge words highlighted */
+  highlightedTranscript?: string;
   durationSeconds: number;
   wordCount: number;
   wpm: number;
+  /** Number of filler/hedge words detected */
+  fillerCount?: number;
   /** AI analysis of body language from video frames */
   bodyLanguageAnalysis?: string;
 }
@@ -35,10 +58,13 @@ export interface EvaluateRequest {
   promptText?: string;
   /** Body language analysis to incorporate into feedback */
   bodyLanguageAnalysis?: string;
+  /** Model ID to use for evaluation (defaults to Claude) */
+  modelId?: string;
 }
 
 export interface EvaluationResult {
   feedback: string;
+  modelUsed?: string;
 }
 
 export interface SpeakRequest {
@@ -55,11 +81,18 @@ export interface SaveSessionRequest {
   promptLabel?: string;
   promptText?: string;
   transcript: string;
+  highlightedTranscript?: string;
   wordCount: number;
   wpm: number;
   durationSeconds: number;
   feedback?: string;
   bodyLanguageAnalysis?: string;
+  modelUsed?: string;
+  clarityScore?: number;
+  confidenceScore?: number;
+  concisenessScore?: number;
+  connectionScore?: number;
+  fillerCount?: number;
 }
 
 export interface SaveSessionResult {
@@ -75,8 +108,15 @@ export interface SessionSummary {
   durationSeconds: number;
   createdAt: string;
   transcript: string;
+  highlightedTranscript?: string;
   feedback?: string;
   bodyLanguageAnalysis?: string;
+  modelUsed?: string;
+  clarityScore?: number;
+  confidenceScore?: number;
+  concisenessScore?: number;
+  connectionScore?: number;
+  fillerCount?: number;
 }
 
 export interface SessionListResult {

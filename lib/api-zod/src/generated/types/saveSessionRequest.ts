@@ -10,9 +10,16 @@ export interface SaveSessionRequest {
   promptLabel?: string;
   promptText?: string;
   transcript: string;
+  highlightedTranscript?: string;
   wordCount: number;
   wpm: number;
   durationSeconds: number;
   feedback?: string;
   bodyLanguageAnalysis?: string;
+  modelUsed?: string;
+  clarityScore?: number;
+  confidenceScore?: number;
+  concisenessScore?: number;
+  connectionScore?: number;
+  fillerCount?: number;
 }

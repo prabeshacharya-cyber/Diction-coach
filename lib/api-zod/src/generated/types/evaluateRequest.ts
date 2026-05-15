@@ -12,4 +12,6 @@ export interface EvaluateRequest {
   promptText?: string;
   /** Body language analysis to incorporate into feedback */
   bodyLanguageAnalysis?: string;
+  /** Model ID to use for evaluation (defaults to Claude) */
+  modelId?: string;
 }
