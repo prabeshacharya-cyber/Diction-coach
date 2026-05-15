@@ -194,7 +194,7 @@ async function transcribeAudio(file: File): Promise<string> {
   try {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("model", "openai/whisper-large-v3");
+    formData.append("model", "openai/whisper-large-v3-turbo");
     const resp = await fetch("https://api.deepinfra.com/v1/openai/audio/transcriptions", {
       method: "POST",
       headers: { Authorization: `Bearer ${deepinfraKey()}` },
@@ -218,7 +218,7 @@ async function transcribeAudio(file: File): Promise<string> {
 
 async function analyzeBodyLanguage(frames: string[]): Promise<string> {
   // Build multimodal message with image URLs
-  const imageContent = frames.slice(0, 5).map((frame) => ({
+  const imageContent = frames.slice(0, 3).map((frame) => ({
     type: "image_url" as const,
     image_url: {
       url: frame.startsWith("data:") ? frame : `data:image/jpeg;base64,${frame}`,
@@ -337,32 +337,8 @@ router.post("/speak", async (req, res) => {
   const { text } = parsed.data;
 
   try {
-    // Convert written coaching report to a natural spoken script using DeepSeek V3
-    const spokenScript = await deepinfraChat(
-      DEFAULT_MODEL_ID,
-      [
-        {
-          role: "system",
-          content: `You are a Senior Partner at Deloitte giving verbal coaching feedback to a candidate after their practice presentation. Convert the written coaching report into a natural spoken debrief.
-
-Rules:
-- Pure flowing speech — no lists, no asterisks, no "number one", no markdown formatting
-- Open directly and confidently: "Alright, let me give you my honest read on that."
-- Weave in the actual score numbers naturally: "I landed you at an eight on conciseness — here's why."
-- Name one concrete strength and one most critical improvement
-- End with a single specific, actionable technique the candidate can apply in the next practice
-- 140–170 words total — crisp, not padded
-- Tone: direct, confident senior partner. Not a cheerleader. Brutally honest but constructive.`,
-        },
-        {
-          role: "user",
-          content: `Convert this written coaching report into a natural spoken script:\n\n${text}`,
-        },
-      ],
-      500
-    );
-
-    const audioBuffer = await generateSpeech(spokenScript.slice(0, 4096));
+    const spokenScript = buildSpokenScript(text);
+    const audioBuffer = await generateSpeech(spokenScript);
     res.json({ audioBase64: audioBuffer.toString("base64") });
   } catch (err) {
     console.error("TTS error:", err);
@@ -370,6 +346,61 @@ Rules:
     res.status(500).json({ error: message });
   }
 });
+
+/**
+ * Extract the key coaching sections from the markdown feedback and format them
+ * as flowing speech — zero LLM calls, zero extra latency.
+ */
+function buildSpokenScript(feedback: string): string {
+  const strip = (s: string) =>
+    s
+      .replace(/#{1,6}\s*/g, "")
+      .replace(/\*\*(.+?)\*\*/g, "$1")
+      .replace(/\*(.+?)\*/g, "$1")
+      .replace(/^\s*[-*]\s+/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+  // Extract a named section from the markdown
+  const section = (heading: RegExp): string => {
+    const m = feedback.match(new RegExp(`${heading.source}([\\s\\S]*?)(?=\\n###|$)`, "i"));
+    return m ? strip(m[1]) : "";
+  };
+
+  // Pull scores line-by-line and read them naturally
+  const scoresBlock = section(/###\s*Partner Panel Scores[^\n]*/);
+  const scoreLines = scoresBlock
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      // "Clarity (Diction & Articulation): 8" → "Clarity: 8"
+      const m = l.match(/\*?\*?(\w[\w\s&]+?)\s*(?:\([^)]*\))?\s*:\s*(\d+)/);
+      return m ? `${m[1].trim()}: ${m[2]}` : null;
+    })
+    .filter(Boolean);
+
+  const critique = section(/###\s*The Critique/);
+  const drill = section(/###\s*Today's Drill/);
+
+  const parts: string[] = ["Alright, let me give you my honest read on that."];
+
+  if (scoreLines.length) {
+    parts.push(`Your scores: ${scoreLines.join(", ")}.`);
+  }
+
+  if (critique) {
+    // Keep first 600 chars of critique so the audio stays under ~3 minutes
+    const trimmed = critique.length > 600 ? critique.slice(0, 600).replace(/\s+\S*$/, "") + "…" : critique;
+    parts.push(trimmed);
+  }
+
+  if (drill) {
+    parts.push(`For your next session: ${drill}`);
+  }
+
+  return parts.join("\n\n").slice(0, 3500);
+}
 
 async function generateSpeech(text: string): Promise<Buffer> {
   try {
