@@ -90,7 +90,7 @@ export function useVideoRecorder() {
     } catch (err) {
       setHasPermission(false);
       console.error("Failed to start recording:", err);
-      throw err;
+      // Don't rethrow — hasPermission(false) drives the UI error state
     }
   }, [startLevelPolling]);
 

@@ -169,7 +169,7 @@ export default function Home() {
       setSessionSaved(false);
       setScoresAnimated(false);
       resetRecorder();
-      startRecording();
+      await startRecording();
     }
   };
 
